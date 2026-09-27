@@ -78,6 +78,20 @@ describe('useGradientDocument', () => {
     api.mountHost(host)
     expect(createRenderer).toHaveBeenCalledWith(host)
     expect(draw).toHaveBeenCalledWith(api.doc.value)
+    expect(api.renderError.value).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('mountHost surfaces webgl2-unavailable without drawing', () => {
+    vi.mocked(createRenderer).mockReturnValueOnce({
+      ok: false,
+      error: 'webgl2-unavailable',
+    })
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+    expect(api.renderError.value).toBe('webgl2-unavailable')
+    expect(draw).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

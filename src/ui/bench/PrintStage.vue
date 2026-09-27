@@ -15,14 +15,21 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="print-stage">
+  <div class="print-stage" :data-blocked="renderError ? 'true' : undefined">
     <div
       ref="hostEl"
       class="print-stage__host"
       role="img"
-      aria-label="Live gradient print"
+      :aria-label="renderError ? undefined : 'Live gradient print'"
+      :aria-hidden="renderError ? 'true' : undefined"
     />
-    <p v-if="renderError" class="print-stage__error">WebGL unavailable</p>
+    <p
+      v-if="renderError"
+      class="print-stage__blocker"
+      role="status"
+    >
+      tolos needs WebGL in this browser.
+    </p>
   </div>
 </template>
 
@@ -51,16 +58,20 @@ onMounted(() => {
   height: 100%;
 }
 
-.print-stage__error {
+.print-stage__blocker {
   position: absolute;
   inset: var(--space-print-inset);
   display: grid;
   place-items: center;
   margin: 0;
+  padding: var(--space-5);
   border-radius: var(--rounded-sm);
-  background: var(--color-print-mat);
-  color: var(--color-danger);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
   font-family: var(--font-ui);
   font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+  line-height: var(--type-body-line);
+  text-align: center;
 }
 </style>

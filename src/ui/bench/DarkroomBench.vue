@@ -8,12 +8,12 @@ const { mountHost, renderError } = useGradientDocument()
 </script>
 
 <template>
-  <div class="bench">
+  <div class="bench" :data-webgl="renderError ? 'unavailable' : 'ready'">
     <div class="bench__main">
       <BrandMark />
       <PrintStage :mount-host="mountHost" :render-error="renderError" />
     </div>
-    <ControlRail />
+    <ControlRail v-if="!renderError" />
   </div>
 </template>
 
@@ -26,6 +26,10 @@ const { mountHost, renderError } = useGradientDocument()
   min-height: 100vh;
   padding: var(--space-margin-desktop);
   background: var(--color-background);
+}
+
+.bench[data-webgl='unavailable'] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .bench__main {
