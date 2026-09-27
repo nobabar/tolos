@@ -12,9 +12,9 @@
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "lint": "run-s \"lint:*\"",
-    "lint:oxlint": "oxlint ./src --fix",
-    "lint:eslint": "eslint ./src --fix --cache",
-    "format": "prettier --write --experimental-cli src/"
+    "lint:oxlint": "oxlint ./src ./tests --fix",
+    "lint:eslint": "eslint ./src ./tests --fix --cache",
+    "format": "prettier --write --experimental-cli src/ tests/"
   },
   "dependencies": {
     "vue": "^3.5.42"
