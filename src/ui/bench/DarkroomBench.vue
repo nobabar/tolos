@@ -1,0 +1,44 @@
+<script setup lang="ts">
+import BrandMark from './BrandMark.vue'
+import ControlRail from './ControlRail.vue'
+import PrintStage from './PrintStage.vue'
+import { useGradientDocument } from './use-gradient-document'
+
+const { mountHost, renderError } = useGradientDocument()
+</script>
+
+<template>
+  <div class="bench">
+    <div class="bench__main">
+      <BrandMark />
+      <PrintStage :mount-host="mountHost" :render-error="renderError" />
+    </div>
+    <ControlRail />
+  </div>
+</template>
+
+<style scoped>
+.bench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: var(--space-bench-gap);
+  align-items: start;
+  min-height: 100vh;
+  padding: var(--space-margin-desktop);
+  background: var(--color-background);
+}
+
+.bench__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .bench {
+    grid-template-columns: 1fr;
+    padding: var(--space-margin-compact);
+  }
+}
+</style>

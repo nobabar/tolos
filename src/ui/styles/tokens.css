@@ -1,0 +1,86 @@
+:root {
+  /* Colors */
+  --color-background: #141210;
+  --color-surface: #1c1915;
+  --color-surface-raised: #26221c;
+  --color-surface-sunken: #0e0c0a;
+  --color-on-surface: #e8e4dc;
+  --color-on-surface-muted: #9a9488;
+  --color-on-surface-faint: #6b665c;
+  --color-outline: #3d3830;
+  --color-outline-strong: #5c564c;
+
+  /* Brand / actions */
+  --color-primary: #c4a574;
+  --color-on-primary: #1a1510;
+  --color-primary-hover: #d4b888;
+  --color-primary-muted: #8a7350;
+
+  /* Semantic */
+  --color-danger: #c47a6a;
+  --color-on-danger: #1a1210;
+  --color-focus-ring: #e8e4dc;
+
+  /* Print stage */
+  --color-print-mat: #0a0908;
+  --color-print-edge: #2a2620;
+
+  /* Typography families */
+  --font-brand: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-ui: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+
+  /* Brand mark */
+  --type-brand-size: 28px;
+  --type-brand-weight: 500;
+  --type-brand-line: 1.1;
+  --type-brand-tracking: -0.02em;
+
+  --type-brand-sm-size: 20px;
+  --type-brand-sm-weight: 500;
+  --type-brand-sm-line: 1.1;
+  --type-brand-sm-tracking: -0.01em;
+
+  /* Labels / body / mono */
+  --type-label-size: 11px;
+  --type-label-weight: 500;
+  --type-label-line: 1.3;
+  --type-label-tracking: 0.08em;
+
+  --type-body-size: 14px;
+  --type-body-weight: 400;
+  --type-body-line: 1.45;
+
+  --type-body-strong-weight: 500;
+
+  --type-mono-size: 13px;
+  --type-mono-weight: 400;
+  --type-mono-line: 1.4;
+  --type-mono-tracking: 0.02em;
+
+  --type-mono-sm-size: 12px;
+
+  /* Rounded */
+  --rounded-none: 0;
+  --rounded-sm: 2px;
+  --rounded: 4px;
+  --rounded-md: 6px;
+  --rounded-lg: 8px;
+  --rounded-full: 9999px;
+
+  /* Spacing */
+  --space-unit: 8px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-gutter: 24px;
+  --space-margin-desktop: 40px;
+  --space-margin-compact: 16px;
+  --space-bench-gap: 28px;
+  --space-print-inset: 20px;
+}

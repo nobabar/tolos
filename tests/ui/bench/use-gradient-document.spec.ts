@@ -1,0 +1,95 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { defineComponent, nextTick } from 'vue'
+import { mount } from '@vue/test-utils'
+
+import type { CreateRendererResult, Renderer } from '@/engine/render'
+import {
+  useGradientDocument,
+  type UseGradientDocument,
+} from '@/ui/bench/use-gradient-document'
+
+const draw = vi.fn<Renderer['draw']>()
+const resize = vi.fn<Renderer['resize']>()
+const dispose = vi.fn<Renderer['dispose']>()
+
+vi.mock('@/engine/render', () => ({
+  createRenderer: vi.fn<() => CreateRendererResult>(() => ({
+    ok: true,
+    renderer: { draw, resize, dispose },
+  })),
+}))
+
+import { createRenderer } from '@/engine/render'
+
+function mountComposable(): {
+  api: UseGradientDocument
+  wrapper: ReturnType<typeof mount>
+} {
+  const box: { api?: UseGradientDocument } = {}
+  const Host = defineComponent({
+    setup() {
+      box.api = useGradientDocument()
+      return () => null
+    },
+  })
+  const wrapper = mount(Host)
+  if (!box.api) throw new Error('composable did not initialize')
+  return { api: box.api, wrapper }
+}
+
+describe('useGradientDocument', () => {
+  beforeEach(() => {
+    draw.mockClear()
+    resize.mockClear()
+    dispose.mockClear()
+    vi.mocked(createRenderer).mockClear()
+  })
+
+  it('cold open yields a seeded live document', () => {
+    const { api, wrapper } = mountComposable()
+    expect(api.doc.value.seed.length).toBeGreaterThan(0)
+    expect(api.doc.value.params.softness.amount).toBeGreaterThanOrEqual(0)
+    expect(api.jobState.value).toBe('idle')
+    wrapper.unmount()
+  })
+
+  it('applyParam updates document params without page reload', async () => {
+    const { api, wrapper } = mountComposable()
+    const seedBefore = api.doc.value.seed
+    api.applyParam('softness', 'amount', 0.42)
+    await nextTick()
+    expect(api.doc.value.params.softness.amount).toBe(0.42)
+    expect(api.doc.value.seed).toBe(seedBefore)
+    wrapper.unmount()
+  })
+
+  it('applyRandomize replaces seed via document command', async () => {
+    const { api, wrapper } = mountComposable()
+    const seedBefore = api.doc.value.seed
+    api.applyRandomize()
+    await nextTick()
+    expect(api.doc.value.seed).not.toBe(seedBefore)
+    wrapper.unmount()
+  })
+
+  it('mountHost draws through engine renderer only', () => {
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+    expect(createRenderer).toHaveBeenCalledWith(host)
+    expect(draw).toHaveBeenCalledWith(api.doc.value)
+    wrapper.unmount()
+  })
+
+  it('document revision redraws without remounting host', async () => {
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+    draw.mockClear()
+    api.applyParam('grain', 'amount', 0.55)
+    await nextTick()
+    expect(draw).toHaveBeenCalledTimes(1)
+    expect(draw).toHaveBeenCalledWith(api.doc.value)
+    wrapper.unmount()
+  })
+})
