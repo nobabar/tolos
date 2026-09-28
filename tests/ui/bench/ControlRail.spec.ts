@@ -13,6 +13,23 @@ function mockApplyParam() {
   return vi.fn<UseGradientDocument['applyParam']>()
 }
 
+function railProps(overrides: Partial<{
+  jobState: 'idle' | 'exposing' | 'exporting'
+  doc: ReturnType<typeof sampleDoc>
+  applyParam: UseGradientDocument['applyParam']
+  applyRandomize: () => void
+  applySeed: UseGradientDocument['applySeed']
+}> = {}) {
+  return {
+    jobState: 'idle' as const,
+    doc: sampleDoc(),
+    applyParam: mockApplyParam(),
+    applyRandomize: vi.fn<() => void>(),
+    applySeed: vi.fn<UseGradientDocument['applySeed']>(() => 'ok'),
+    ...overrides,
+  }
+}
+
 describe('ControlRail actions', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -24,12 +41,7 @@ describe('ControlRail actions', () => {
 
   it('renders New exposure and inert Pull print', () => {
     const wrapper = mount(ControlRail, {
-      props: {
-        jobState: 'idle',
-        doc: sampleDoc(),
-        applyParam: mockApplyParam(),
-        applyRandomize: vi.fn<() => void>(),
-      },
+      props: railProps(),
     })
 
     expect(wrapper.text()).toContain('New exposure')
@@ -39,12 +51,7 @@ describe('ControlRail actions', () => {
 
   it('renders Softness, Grain, and Palette dials', () => {
     const wrapper = mount(ControlRail, {
-      props: {
-        jobState: 'idle',
-        doc: sampleDoc(),
-        applyParam: mockApplyParam(),
-        applyRandomize: vi.fn<() => void>(),
-      },
+      props: railProps(),
     })
 
     expect(wrapper.text()).toContain('Softness')
@@ -53,15 +60,20 @@ describe('ControlRail actions', () => {
     expect(wrapper.findAll('input[type="range"]')).toHaveLength(3)
   })
 
+  it('renders Seed field between dials and actions', () => {
+    const doc = sampleDoc()
+    const wrapper = mount(ControlRail, {
+      props: railProps({ doc }),
+    })
+
+    expect(wrapper.text()).toContain('Seed')
+    expect(wrapper.get('#seed-input').element).toHaveProperty('value', doc.seed)
+  })
+
   it('click New exposure invokes applyRandomize when idle', async () => {
     const applyRandomize = vi.fn<() => void>()
     const wrapper = mount(ControlRail, {
-      props: {
-        jobState: 'idle',
-        doc: sampleDoc(),
-        applyParam: mockApplyParam(),
-        applyRandomize,
-      },
+      props: railProps({ applyRandomize }),
     })
 
     await wrapper.get('button.btn-ghost').trigger('click')
@@ -71,12 +83,7 @@ describe('ControlRail actions', () => {
   it('New exposure is non-operative while exposing', async () => {
     const applyRandomize = vi.fn<() => void>()
     const wrapper = mount(ControlRail, {
-      props: {
-        jobState: 'exposing',
-        doc: sampleDoc(),
-        applyParam: mockApplyParam(),
-        applyRandomize,
-      },
+      props: railProps({ jobState: 'exposing', applyRandomize }),
     })
 
     const button = wrapper.get('button.btn-ghost')
@@ -89,12 +96,7 @@ describe('ControlRail actions', () => {
   it('New exposure is non-operative while exporting', async () => {
     const applyRandomize = vi.fn<() => void>()
     const wrapper = mount(ControlRail, {
-      props: {
-        jobState: 'exporting',
-        doc: sampleDoc(),
-        applyParam: mockApplyParam(),
-        applyRandomize,
-      },
+      props: railProps({ jobState: 'exporting', applyRandomize }),
     })
 
     const button = wrapper.get('button.btn-ghost')
@@ -106,12 +108,7 @@ describe('ControlRail actions', () => {
   it('Pull print is present and inert', async () => {
     const applyRandomize = vi.fn<() => void>()
     const wrapper = mount(ControlRail, {
-      props: {
-        jobState: 'idle',
-        doc: sampleDoc(),
-        applyParam: mockApplyParam(),
-        applyRandomize,
-      },
+      props: railProps({ applyRandomize }),
     })
 
     const pull = wrapper.get('button.btn-primary')
@@ -125,12 +122,7 @@ describe('ControlRail actions', () => {
     const applyParam = mockApplyParam()
     const doc = sampleDoc()
     const wrapper = mount(ControlRail, {
-      props: {
-        jobState: 'idle',
-        doc,
-        applyParam,
-        applyRandomize: vi.fn<() => void>(),
-      },
+      props: railProps({ doc, applyParam }),
     })
 
     const softness = wrapper.get('input[type="range"]')
@@ -144,12 +136,7 @@ describe('ControlRail actions', () => {
   it('dial commit is dropped when job becomes busy before debounce fires', async () => {
     const applyParam = mockApplyParam()
     const wrapper = mount(ControlRail, {
-      props: {
-        jobState: 'idle',
-        doc: sampleDoc(),
-        applyParam,
-        applyRandomize: vi.fn<() => void>(),
-      },
+      props: railProps({ applyParam }),
     })
 
     const softness = wrapper.get('input[type="range"]')
@@ -161,16 +148,20 @@ describe('ControlRail actions', () => {
 
   it('dials are disabled while exposing', () => {
     const wrapper = mount(ControlRail, {
-      props: {
-        jobState: 'exposing',
-        doc: sampleDoc(),
-        applyParam: mockApplyParam(),
-        applyRandomize: vi.fn<() => void>(),
-      },
+      props: railProps({ jobState: 'exposing' }),
     })
 
     for (const input of wrapper.findAll('input[type="range"]')) {
       expect(input.attributes('disabled')).toBeDefined()
     }
+  })
+
+  it('seed field is disabled while exposing', () => {
+    const wrapper = mount(ControlRail, {
+      props: railProps({ jobState: 'exposing' }),
+    })
+
+    expect(wrapper.get('#seed-input').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.seed-field__copy').attributes('disabled')).toBeDefined()
   })
 })

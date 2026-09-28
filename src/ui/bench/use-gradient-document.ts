@@ -3,8 +3,10 @@ import { onBeforeUnmount, shallowRef, type ShallowRef } from 'vue'
 import {
   createDocument,
   createOpaqueSeed,
+  isValidSeed,
   randomize,
   setParam,
+  setSeed,
   type GradientDocument,
   type GrainParams,
   type PaletteParams,
@@ -14,6 +16,8 @@ import {
 import { createRenderer, type Renderer } from '@/engine/render'
 
 export type JobState = 'idle' | 'exposing' | 'exporting'
+
+export type ApplySeedResult = 'ok' | 'invalid'
 
 type FamilyKeyMap = {
   palette: keyof PaletteParams
@@ -28,6 +32,7 @@ export type UseGradientDocument = {
   mountHost: (host: HTMLElement) => void
   applyParam: <F extends ParamFamily>(family: F, key: FamilyKeyMap[F], value: number) => void
   applyRandomize: () => void
+  applySeed: (seed: string) => ApplySeedResult
 }
 
 export function useGradientDocument(): UseGradientDocument {
@@ -44,7 +49,7 @@ export function useGradientDocument(): UseGradientDocument {
     renderer.draw(doc.value)
   }
 
-  /** Shared expose path for dial commits and randomize redraw. */
+  /** Shared expose path for dial commits, seed restore, and randomize redraw. */
   function runExposure(mutate: () => void): void {
     if (jobState.value !== 'idle') return
     jobState.value = 'exposing'
@@ -81,6 +86,16 @@ export function useGradientDocument(): UseGradientDocument {
     })
   }
 
+  function applySeed(seed: string): ApplySeedResult {
+    if (jobState.value !== 'idle') return 'ok'
+    const trimmed = seed.trim()
+    if (!isValidSeed(trimmed)) return 'invalid'
+    runExposure(() => {
+      doc.value = setSeed(doc.value, trimmed)
+    })
+    return 'ok'
+  }
+
   onBeforeUnmount(() => {
     resizeObserver?.disconnect()
     resizeObserver = null
@@ -95,5 +110,6 @@ export function useGradientDocument(): UseGradientDocument {
     mountHost,
     applyParam,
     applyRandomize,
+    applySeed,
   }
 }

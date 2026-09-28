@@ -10,6 +10,7 @@ export { deriveParamsFromSeed } from './derive-params'
 export {
   createDocument,
   createOpaqueSeed,
+  isValidSeed,
   randomize,
   setParam,
   setSeed,

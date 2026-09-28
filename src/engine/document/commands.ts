@@ -40,12 +40,18 @@ export function randomize(doc: GradientDocument): GradientDocument {
   }
 }
 
+/** Replace seed only. Params stay as-is. */
 export function setSeed(doc: GradientDocument, seed: string): GradientDocument {
   return {
     schemaVersion: doc.schemaVersion,
     seed,
-    params: deriveParamsFromSeed(seed),
+    params: doc.params,
   }
+}
+
+/** Non-empty after trim. Engine hashes any opaque seed string. */
+export function isValidSeed(seed: string): boolean {
+  return seed.trim().length > 0
 }
 
 export function setParam<F extends ParamFamily>(

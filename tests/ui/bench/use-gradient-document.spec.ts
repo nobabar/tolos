@@ -166,6 +166,82 @@ describe('useGradientDocument', () => {
     wrapper.unmount()
   })
 
+  it('idle applySeed updates seed and keeps dial params', async () => {
+    const { api, wrapper } = mountComposable()
+    api.applyParam('grain', 'amount', 0.42)
+    await flushFrame()
+    const paramsBefore = structuredClone(api.doc.value.params)
+    const result = api.applySeed('restored-look')
+    await nextTick()
+    expect(result).toBe('ok')
+    expect(api.doc.value.seed).toBe('restored-look')
+    expect(api.doc.value.params).toEqual(paramsBefore)
+    expect(api.doc.value.params).not.toEqual(createDocument('restored-look').params)
+    await flushFrame()
+    wrapper.unmount()
+  })
+
+  it('idle applySeed trims whitespace before commit', async () => {
+    const { api, wrapper } = mountComposable()
+    const result = api.applySeed('  padded-seed  ')
+    await nextTick()
+    expect(result).toBe('ok')
+    expect(api.doc.value.seed).toBe('padded-seed')
+    await flushFrame()
+    wrapper.unmount()
+  })
+
+  it('invalid applySeed leaves document unchanged', async () => {
+    const { api, wrapper } = mountComposable()
+    const seedBefore = api.doc.value.seed
+    const paramsBefore = structuredClone(api.doc.value.params)
+    const result = api.applySeed('   ')
+    await nextTick()
+    expect(result).toBe('invalid')
+    expect(api.doc.value.seed).toBe(seedBefore)
+    expect(api.doc.value.params).toEqual(paramsBefore)
+    wrapper.unmount()
+  })
+
+  it('applySeed leaves document unchanged while exposing', async () => {
+    const { api, wrapper } = mountComposable()
+    const seedBefore = api.doc.value.seed
+    const paramsBefore = structuredClone(api.doc.value.params)
+    api.jobState.value = 'exposing'
+    const result = api.applySeed('busy-seed')
+    await nextTick()
+    expect(result).toBe('ok')
+    expect(api.doc.value.seed).toBe(seedBefore)
+    expect(api.doc.value.params).toEqual(paramsBefore)
+    wrapper.unmount()
+  })
+
+  it('applySeed leaves document unchanged while exporting', async () => {
+    const { api, wrapper } = mountComposable()
+    const seedBefore = api.doc.value.seed
+    const paramsBefore = structuredClone(api.doc.value.params)
+    api.jobState.value = 'exporting'
+    api.applySeed('busy-seed')
+    await nextTick()
+    expect(api.doc.value.seed).toBe(seedBefore)
+    expect(api.doc.value.params).toEqual(paramsBefore)
+    wrapper.unmount()
+  })
+
+  it('idle applySeed enters exposing then returns to idle after paint', async () => {
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+    draw.mockClear()
+
+    api.applySeed('expose-seed')
+    expect(api.jobState.value).toBe('exposing')
+    await flushFrame()
+    expect(draw).toHaveBeenCalledWith(api.doc.value)
+    expect(api.jobState.value).toBe('idle')
+    wrapper.unmount()
+  })
+
   it('mountHost draws through engine renderer only', () => {
     const { api, wrapper } = mountComposable()
     const host = document.createElement('div')

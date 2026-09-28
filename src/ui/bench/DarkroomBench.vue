@@ -4,7 +4,8 @@ import ControlRail from './ControlRail.vue'
 import PrintStage from './PrintStage.vue'
 import { useGradientDocument } from './use-gradient-document'
 
-const { doc, mountHost, renderError, applyParam, applyRandomize, jobState } = useGradientDocument()
+const { doc, mountHost, renderError, applyParam, applyRandomize, applySeed, jobState } =
+  useGradientDocument()
 </script>
 
 <template>
@@ -19,6 +20,7 @@ const { doc, mountHost, renderError, applyParam, applyRandomize, jobState } = us
       :doc="doc"
       :apply-param="applyParam"
       :apply-randomize="applyRandomize"
+      :apply-seed="applySeed"
     />
   </div>
 </template>

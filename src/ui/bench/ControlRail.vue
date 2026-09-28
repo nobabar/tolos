@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import type { GradientDocument } from '@/engine/document'
 import ParamDial from './ParamDial.vue'
+import SeedField from './SeedField.vue'
 import type { JobState, UseGradientDocument } from './use-gradient-document'
 
 const DIAL_BINDINGS = [
@@ -18,6 +19,7 @@ const props = defineProps<{
   doc: GradientDocument
   applyParam: UseGradientDocument['applyParam']
   applyRandomize: () => void
+  applySeed: UseGradientDocument['applySeed']
 }>()
 
 const busy = computed(() => props.jobState !== 'idle')
@@ -93,6 +95,7 @@ function onNewExposure(): void {
         @update:model-value="onDialInput(binding.family, $event)"
       />
     </div>
+    <SeedField :seed="doc.seed" :disabled="busy" :apply-seed="applySeed" />
     <div class="control-rail__actions">
       <button
         type="button"

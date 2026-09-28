@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   createDocument,
+  isValidSeed,
   randomize,
   setParam,
   setSeed,
@@ -29,12 +30,21 @@ describe('GradientDocument', () => {
 })
 
 describe('document commands', () => {
-  it('setSeed replaces seed and re-derives params deterministically', () => {
+  it('setSeed replaces seed and keeps prior params', () => {
     const base = createDocument('original')
-    const updated = setSeed(base, 'restored-seed')
+    const tuned = setParam(base, 'grain', 'amount', 0.42)
+    const updated = setSeed(tuned, 'restored-seed')
     expect(updated.seed).toBe('restored-seed')
-    expect(updated.params).toEqual(createDocument('restored-seed').params)
-    expect(base.seed).toBe('original')
+    expect(updated.params).toEqual(tuned.params)
+    expect(updated.params).not.toEqual(createDocument('restored-seed').params)
+    expect(tuned.seed).toBe('original')
+  })
+
+  it('isValidSeed accepts trimmed non-empty strings and rejects blank', () => {
+    expect(isValidSeed('abc')).toBe(true)
+    expect(isValidSeed('  abc  ')).toBe(true)
+    expect(isValidSeed('')).toBe(false)
+    expect(isValidSeed('   ')).toBe(false)
   })
 
   it('setParam updates one param without changing seed', () => {
