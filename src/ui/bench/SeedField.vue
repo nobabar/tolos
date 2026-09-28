@@ -131,9 +131,15 @@ async function onCopy(): Promise<void> {
 }
 
 .seed-field__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: calc(var(--space-2) * -1) calc(var(--space-2) * -1) calc(var(--space-2) * -1) 0;
   background: transparent;
   border: none;
-  padding: 0;
+  padding: var(--space-2);
   font-family: var(--font-ui);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);

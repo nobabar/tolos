@@ -13,6 +13,8 @@ const emit = defineEmits<{
 
 const display = computed(() => props.modelValue.toFixed(2))
 
+const valueText = computed(() => `${props.label} ${display.value}`)
+
 const percent = computed(() => `${Math.round(props.modelValue * 100)}%`)
 
 function onInput(event: Event): void {
@@ -40,7 +42,7 @@ function onInput(event: Event): void {
           step="0.01"
           :value="modelValue"
           :disabled="disabled"
-          :aria-valuetext="display"
+          :aria-valuetext="valueText"
           @input="onInput"
         />
       </div>

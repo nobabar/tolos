@@ -106,7 +106,14 @@ function onNewExposure(): void {
       >
         New exposure
       </button>
-      <button type="button" class="btn-primary is-disabled" disabled>Pull print</button>
+      <button
+        type="button"
+        class="btn-primary is-disabled"
+        aria-disabled="true"
+        tabindex="0"
+      >
+        Pull print
+      </button>
     </div>
   </aside>
 </template>

@@ -105,7 +105,7 @@ describe('ControlRail actions', () => {
     expect(applyRandomize).not.toHaveBeenCalled()
   })
 
-  it('Pull print is present and inert', async () => {
+  it('Pull print is present and inert but remains in tab order', async () => {
     const applyRandomize = vi.fn<() => void>()
     const wrapper = mount(ControlRail, {
       props: railProps({ applyRandomize }),
@@ -113,9 +113,22 @@ describe('ControlRail actions', () => {
 
     const pull = wrapper.get('button.btn-primary')
     expect(pull.text()).toContain('Pull print')
-    expect(pull.attributes('disabled')).toBeDefined()
+    expect(pull.attributes('disabled')).toBeUndefined()
+    expect(pull.attributes('aria-disabled')).toBe('true')
+    expect(pull.attributes('tabindex')).toBe('0')
     await pull.trigger('click')
     expect(applyRandomize).not.toHaveBeenCalled()
+  })
+
+  it('dial aria-valuetext announces name and value', () => {
+    const doc = sampleDoc()
+    const wrapper = mount(ControlRail, {
+      props: railProps({ doc }),
+    })
+
+    const softness = wrapper.get('#dial-Softness')
+    const amount = doc.params.softness.amount.toFixed(2)
+    expect(softness.attributes('aria-valuetext')).toBe(`Softness ${amount}`)
   })
 
   it('dial input commits applyParam after debounce when idle', async () => {

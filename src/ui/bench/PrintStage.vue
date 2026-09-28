@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import type { JobState } from './use-gradient-document'
 
@@ -10,26 +10,57 @@ const props = defineProps<{
 }>()
 
 const hostEl = ref<HTMLElement | null>(null)
+const prefersReducedMotion = ref(false)
+
+let motionQuery: MediaQueryList | null = null
+
+function syncMotionPreference(): void {
+  prefersReducedMotion.value = motionQuery?.matches ?? false
+}
 
 onMounted(() => {
   const host = hostEl.value
   if (host) props.mountHost(host)
+
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    syncMotionPreference()
+    motionQuery.addEventListener('change', syncMotionPreference)
+  }
 })
+
+onBeforeUnmount(() => {
+  motionQuery?.removeEventListener('change', syncMotionPreference)
+  motionQuery = null
+})
+
+const exposing = computed(() => !props.renderError && props.jobState === 'exposing')
+
+function focusHost(): void {
+  hostEl.value?.focus()
+}
+
+defineExpose({ focusHost })
 </script>
 
 <template>
   <div class="print-stage" :data-blocked="renderError ? 'true' : undefined">
     <div
       ref="hostEl"
+      data-testid="print-host"
       class="print-stage__host"
       role="img"
+      tabindex="0"
       :aria-label="renderError ? undefined : 'Live gradient print'"
       :aria-hidden="renderError ? 'true' : undefined"
     />
     <div
-      v-if="!renderError && jobState === 'exposing'"
+      v-if="exposing"
       class="print-stage__veil"
-      aria-hidden="true"
+      :class="{ 'print-stage__veil--fade': !prefersReducedMotion }"
+      :data-motion="prefersReducedMotion ? 'reduce' : 'ok'"
+      role="status"
+      aria-live="polite"
     >
       <span class="print-stage__exposing-label">Exposing...</span>
     </div>
@@ -62,6 +93,11 @@ onMounted(() => {
   background: var(--color-print-mat);
 }
 
+.print-stage__host:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 .print-stage__host :deep(canvas) {
   display: block;
   width: 100%;
@@ -77,6 +113,26 @@ onMounted(() => {
   border-radius: var(--rounded-sm);
   background: rgba(10, 9, 8, 0.35);
   pointer-events: none;
+  opacity: 1;
+}
+
+.print-stage__veil--fade {
+  animation: print-veil-fade 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .print-stage__veil--fade {
+    animation: none;
+  }
+}
+
+@keyframes print-veil-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .print-stage__exposing-label {
