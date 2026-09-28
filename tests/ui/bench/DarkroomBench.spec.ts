@@ -8,6 +8,7 @@ import DarkroomBench from '@/ui/bench/DarkroomBench.vue'
 import type { ApplySeedResult, UseGradientDocument } from '@/ui/bench/use-gradient-document'
 
 const applyRandomize = vi.fn<() => void>()
+const applyExport = vi.fn<() => Promise<void>>(async () => {})
 const jobState = ref<'idle' | 'exposing' | 'exporting'>('idle')
 
 vi.mock('@/engine/render', () => ({
@@ -38,6 +39,7 @@ vi.mock('@/ui/bench/use-gradient-document', async () => {
         applyParam: vi.fn<UseGradientDocument['applyParam']>(),
         applyRandomize,
         applySeed: vi.fn<() => ApplySeedResult>(() => 'ok'),
+        applyExport,
       }
     },
   }
@@ -46,6 +48,7 @@ vi.mock('@/ui/bench/use-gradient-document', async () => {
 describe('DarkroomBench instrument chrome', () => {
   beforeEach(() => {
     applyRandomize.mockClear()
+    applyExport.mockClear()
     jobState.value = 'idle'
   })
 
@@ -79,11 +82,19 @@ describe('DarkroomBench instrument chrome', () => {
     wrapper.unmount()
   })
 
-  it('keeps Pull print in tab order while inert', () => {
+  it('Pull print is operative when idle and stays in tab order when busy', async () => {
     const wrapper = mount(DarkroomBench, { attachTo: document.body })
 
     const pull = wrapper.get('button.btn-primary')
     expect(pull.attributes('disabled')).toBeUndefined()
+    expect(pull.attributes('aria-disabled')).toBeUndefined()
+    expect(pull.classes()).not.toContain('is-disabled')
+
+    await pull.trigger('click')
+    expect(applyExport).toHaveBeenCalledTimes(1)
+
+    jobState.value = 'exposing'
+    await nextTick()
     expect(pull.attributes('aria-disabled')).toBe('true')
     expect(pull.attributes('tabindex')).toBe('0')
 

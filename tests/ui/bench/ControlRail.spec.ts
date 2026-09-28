@@ -19,6 +19,7 @@ function railProps(overrides: Partial<{
   applyParam: UseGradientDocument['applyParam']
   applyRandomize: () => void
   applySeed: UseGradientDocument['applySeed']
+  applyExport: () => Promise<void>
 }> = {}) {
   return {
     jobState: 'idle' as const,
@@ -26,6 +27,7 @@ function railProps(overrides: Partial<{
     applyParam: mockApplyParam(),
     applyRandomize: vi.fn<() => void>(),
     applySeed: vi.fn<UseGradientDocument['applySeed']>(() => 'ok'),
+    applyExport: vi.fn<() => Promise<void>>(async () => {}),
     ...overrides,
   }
 }
@@ -39,7 +41,7 @@ describe('ControlRail actions', () => {
     vi.useRealTimers()
   })
 
-  it('renders New exposure and inert Pull print', () => {
+  it('renders New exposure and operative Pull print when idle', () => {
     const wrapper = mount(ControlRail, {
       props: railProps(),
     })
@@ -47,6 +49,10 @@ describe('ControlRail actions', () => {
     expect(wrapper.text()).toContain('New exposure')
     expect(wrapper.text()).toContain('Pull print')
     expect(wrapper.find('.control-rail').attributes('aria-hidden')).toBeUndefined()
+
+    const pull = wrapper.get('button.btn-primary')
+    expect(pull.attributes('aria-disabled')).toBeUndefined()
+    expect(pull.classes()).not.toContain('is-disabled')
   })
 
   it('renders Softness, Grain, and Palette dials', () => {
@@ -105,19 +111,56 @@ describe('ControlRail actions', () => {
     expect(applyRandomize).not.toHaveBeenCalled()
   })
 
-  it('Pull print is present and inert but remains in tab order', async () => {
-    const applyRandomize = vi.fn<() => void>()
+  it('idle click on Pull print calls applyExport once', async () => {
+    const applyExport = vi.fn<() => Promise<void>>(async () => {})
     const wrapper = mount(ControlRail, {
-      props: railProps({ applyRandomize }),
+      props: railProps({ applyExport }),
     })
 
     const pull = wrapper.get('button.btn-primary')
     expect(pull.text()).toContain('Pull print')
     expect(pull.attributes('disabled')).toBeUndefined()
+    expect(pull.attributes('aria-disabled')).toBeUndefined()
+    await pull.trigger('click')
+    expect(applyExport).toHaveBeenCalledTimes(1)
+  })
+
+  it('Pull print is non-operative while exposing and stays in tab order', async () => {
+    const applyExport = vi.fn<() => Promise<void>>(async () => {})
+    const wrapper = mount(ControlRail, {
+      props: railProps({ jobState: 'exposing', applyExport }),
+    })
+
+    const pull = wrapper.get('button.btn-primary')
+    expect(pull.attributes('disabled')).toBeUndefined()
     expect(pull.attributes('aria-disabled')).toBe('true')
     expect(pull.attributes('tabindex')).toBe('0')
+    expect(pull.classes()).toContain('is-disabled')
     await pull.trigger('click')
-    expect(applyRandomize).not.toHaveBeenCalled()
+    expect(applyExport).not.toHaveBeenCalled()
+  })
+
+  it('shows Pulling print... while exporting and ignores click', async () => {
+    const applyExport = vi.fn<() => Promise<void>>(async () => {})
+    const wrapper = mount(ControlRail, {
+      props: railProps({ jobState: 'exporting', applyExport }),
+    })
+
+    const pull = wrapper.get('button.btn-primary')
+    expect(pull.text()).toContain('Pulling print...')
+    expect(pull.attributes('aria-disabled')).toBe('true')
+    expect(pull.classes()).toContain('is-disabled')
+    await pull.trigger('click')
+    expect(applyExport).not.toHaveBeenCalled()
+  })
+
+  it('shows quiet ~1920px resolution hint beneath Pull print', () => {
+    const wrapper = mount(ControlRail, {
+      props: railProps(),
+    })
+
+    expect(wrapper.text()).toContain('~1920px')
+    expect(wrapper.find('.control-rail__hint').exists()).toBe(true)
   })
 
   it('dial aria-valuetext announces name and value', () => {

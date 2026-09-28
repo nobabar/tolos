@@ -7,10 +7,10 @@ import PrintStage from './PrintStage.vue'
 import { useBenchKeyboard } from './use-bench-keyboard'
 import { useGradientDocument } from './use-gradient-document'
 
-const { doc, mountHost, renderError, applyParam, applyRandomize, applySeed, jobState } =
+const { doc, mountHost, renderError, applyParam, applyRandomize, applySeed, applyExport, jobState } =
   useGradientDocument()
 
-useBenchKeyboard({ jobState, applyRandomize })
+useBenchKeyboard({ jobState, applyRandomize, applyExport })
 
 const printStageRef = ref<InstanceType<typeof PrintStage> | null>(null)
 
@@ -45,6 +45,7 @@ function onSkipToPrint(): void {
       :apply-param="applyParam"
       :apply-randomize="applyRandomize"
       :apply-seed="applySeed"
+      :apply-export="applyExport"
     />
   </div>
 </template>

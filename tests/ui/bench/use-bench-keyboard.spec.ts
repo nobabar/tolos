@@ -8,13 +8,15 @@ import type { JobState } from '@/ui/bench/use-gradient-document'
 function mountKeyboardHost(options: {
   jobState?: JobState
   applyRandomize?: () => void
+  applyExport?: () => Promise<void>
 }) {
   const jobState = ref<JobState>(options.jobState ?? 'idle')
   const applyRandomize = options.applyRandomize ?? vi.fn<() => void>()
+  const applyExport = options.applyExport ?? vi.fn<() => Promise<void>>(async () => {})
 
   const Host = defineComponent({
     setup() {
-      useBenchKeyboard({ jobState, applyRandomize })
+      useBenchKeyboard({ jobState, applyRandomize, applyExport })
       return () =>
         h('div', [
           h('input', { id: 'seed-input', type: 'text' }),
@@ -24,7 +26,7 @@ function mountKeyboardHost(options: {
   })
 
   const wrapper = mount(Host, { attachTo: document.body })
-  return { wrapper, jobState, applyRandomize }
+  return { wrapper, jobState, applyRandomize, applyExport }
 }
 
 describe('useBenchKeyboard', () => {
@@ -107,6 +109,74 @@ describe('useBenchKeyboard', () => {
     button.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
     await nextTick()
     expect(applyRandomize).not.toHaveBeenCalled()
+
+    wrapper.unmount()
+  })
+
+  it('Cmd+Enter calls applyExport when idle', async () => {
+    const applyExport = vi.fn<() => Promise<void>>(async () => {})
+    const { wrapper } = mountKeyboardHost({ applyExport })
+
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }),
+    )
+    await nextTick()
+    expect(applyExport).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+  })
+
+  it('Ctrl+Enter calls applyExport when idle', async () => {
+    const applyExport = vi.fn<() => Promise<void>>(async () => {})
+    const { wrapper } = mountKeyboardHost({ applyExport })
+
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }),
+    )
+    await nextTick()
+    expect(applyExport).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+  })
+
+  it('ignores Cmd+Enter while exposing or exporting', async () => {
+    const applyExport = vi.fn<() => Promise<void>>(async () => {})
+    const { wrapper, jobState } = mountKeyboardHost({ jobState: 'exposing', applyExport })
+
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }),
+    )
+    await nextTick()
+    expect(applyExport).not.toHaveBeenCalled()
+
+    jobState.value = 'exporting'
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }),
+    )
+    await nextTick()
+    expect(applyExport).not.toHaveBeenCalled()
+
+    wrapper.unmount()
+  })
+
+  it('Cmd+Enter from seed input still calls applyExport', async () => {
+    const applyExport = vi.fn<() => Promise<void>>(async () => {})
+    const { wrapper } = mountKeyboardHost({ applyExport })
+
+    const input = document.getElementById('seed-input')
+    expect(input).toBeTruthy()
+    input!.focus()
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    input!.dispatchEvent(event)
+    await nextTick()
+    expect(applyExport).toHaveBeenCalledTimes(1)
+    expect(event.defaultPrevented).toBe(true)
 
     wrapper.unmount()
   })

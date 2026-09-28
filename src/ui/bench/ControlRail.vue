@@ -20,9 +20,14 @@ const props = defineProps<{
   applyParam: UseGradientDocument['applyParam']
   applyRandomize: () => void
   applySeed: UseGradientDocument['applySeed']
+  applyExport: () => Promise<void>
 }>()
 
 const busy = computed(() => props.jobState !== 'idle')
+const pullDisabled = computed(() => props.jobState !== 'idle')
+const pullLabel = computed(() =>
+  props.jobState === 'exporting' ? 'Pulling print...' : 'Pull print',
+)
 
 /** Local dial values for responsive drag; commit via debounced applyParam. */
 const draft = ref({
@@ -81,6 +86,11 @@ function onNewExposure(): void {
   if (busy.value) return
   props.applyRandomize()
 }
+
+function onPullPrint(): void {
+  if (pullDisabled.value) return
+  void props.applyExport()
+}
 </script>
 
 <template>
@@ -108,12 +118,15 @@ function onNewExposure(): void {
       </button>
       <button
         type="button"
-        class="btn-primary is-disabled"
-        aria-disabled="true"
-        tabindex="0"
+        class="btn-primary"
+        :class="{ 'is-disabled': pullDisabled }"
+        :aria-disabled="pullDisabled ? 'true' : undefined"
+        :tabindex="pullDisabled ? 0 : undefined"
+        @click="onPullPrint"
       >
-        Pull print
+        {{ pullLabel }}
       </button>
+      <p class="control-rail__hint">~1920px</p>
     </div>
   </aside>
 </template>
@@ -186,6 +199,17 @@ function onNewExposure(): void {
   background: var(--color-primary-muted);
   color: var(--color-on-surface-faint);
   opacity: 0.7;
+}
+
+.control-rail__hint {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
+  color: var(--color-on-surface-muted);
 }
 
 @media (max-width: 720px) {

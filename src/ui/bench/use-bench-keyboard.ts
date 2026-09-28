@@ -5,6 +5,7 @@ import type { JobState } from './use-gradient-document'
 type BenchKeyboardOptions = {
   jobState: Ref<JobState>
   applyRandomize: () => void
+  applyExport: () => Promise<void>
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -20,9 +21,22 @@ function isSpaceActivator(target: EventTarget | null): boolean {
   return target.getAttribute('role') === 'button'
 }
 
-/** Space / R -> randomize when idle. Ignores typing and button Space activation. */
-export function useBenchKeyboard({ jobState, applyRandomize }: BenchKeyboardOptions): void {
+/** Space / R -> randomize; Cmd/Ctrl+Enter -> Pull print. */
+export function useBenchKeyboard({
+  jobState,
+  applyRandomize,
+  applyExport,
+}: BenchKeyboardOptions): void {
   function onKeydown(event: KeyboardEvent): void {
+    const isPullChord = event.key === 'Enter' && (event.metaKey || event.ctrlKey)
+
+    if (isPullChord) {
+      if (jobState.value !== 'idle') return
+      event.preventDefault()
+      void applyExport()
+      return
+    }
+
     if (jobState.value !== 'idle') return
 
     const key = event.key
