@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { defineComponent, nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 
 import { createDocument } from '@/engine/document'
+import type { ExportPngResult } from '@/engine/export'
 import type { CreateRendererResult, Renderer } from '@/engine/render'
 import {
   useGradientDocument,
@@ -20,6 +21,11 @@ vi.mock('@/engine/render', () => ({
   })),
 }))
 
+vi.mock('@/engine/export', () => ({
+  exportPng: vi.fn<() => Promise<ExportPngResult>>(),
+}))
+
+import { exportPng } from '@/engine/export'
 import { createRenderer } from '@/engine/render'
 
 function flushFrame(): Promise<void> {
@@ -50,6 +56,21 @@ describe('useGradientDocument', () => {
     resize.mockClear()
     dispose.mockClear()
     vi.mocked(createRenderer).mockClear()
+    vi.mocked(exportPng).mockReset()
+    vi.mocked(exportPng).mockResolvedValue({
+      ok: true,
+      blob: new Blob(['png'], { type: 'image/png' }),
+    })
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn<() => string>(() => 'blob:tolos-export'),
+      revokeObjectURL: vi.fn<() => void>(),
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('cold open yields a seeded live document', () => {
@@ -274,6 +295,133 @@ describe('useGradientDocument', () => {
     await flushFrame()
     expect(draw).toHaveBeenCalledTimes(1)
     expect(draw).toHaveBeenCalledWith(api.doc.value)
+    wrapper.unmount()
+  })
+
+  it('idle applyExport sets exporting then returns to idle', async () => {
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+
+    let resolveExport!: (value: ExportPngResult) => void
+    vi.mocked(exportPng).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveExport = resolve
+      }),
+    )
+
+    const pending = api.applyExport()
+    expect(api.jobState.value).toBe('exporting')
+    expect(exportPng).toHaveBeenCalledWith(api.doc.value)
+
+    resolveExport({ ok: true, blob: new Blob(['png'], { type: 'image/png' }) })
+    await pending
+    expect(api.jobState.value).toBe('idle')
+    wrapper.unmount()
+  })
+
+  it('second applyExport is ignored while exporting', async () => {
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+
+    let resolveExport!: (value: ExportPngResult) => void
+    vi.mocked(exportPng).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveExport = resolve
+      }),
+    )
+
+    const first = api.applyExport()
+    expect(api.jobState.value).toBe('exporting')
+    await api.applyExport()
+    expect(exportPng).toHaveBeenCalledTimes(1)
+
+    resolveExport({ ok: true, blob: new Blob(['png'], { type: 'image/png' }) })
+    await first
+    wrapper.unmount()
+  })
+
+  it('while exporting, param randomize and seed leave document unchanged', async () => {
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+
+    let resolveExport!: (value: ExportPngResult) => void
+    vi.mocked(exportPng).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveExport = resolve
+      }),
+    )
+
+    const pending = api.applyExport()
+    const seedBefore = api.doc.value.seed
+    const paramsBefore = structuredClone(api.doc.value.params)
+    api.applyParam('softness', 'amount', 0.42)
+    api.applyRandomize()
+    api.applySeed('busy-seed')
+    await nextTick()
+    expect(api.doc.value.seed).toBe(seedBefore)
+    expect(api.doc.value.params).toEqual(paramsBefore)
+
+    resolveExport({ ok: true, blob: new Blob(['png'], { type: 'image/png' }) })
+    await pending
+    wrapper.unmount()
+  })
+
+  it('applyExport is ignored when WebGL is unavailable', async () => {
+    vi.mocked(createRenderer).mockReturnValueOnce({
+      ok: false,
+      error: 'webgl2-unavailable',
+    })
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+
+    await api.applyExport()
+    expect(exportPng).not.toHaveBeenCalled()
+    expect(api.jobState.value).toBe('idle')
+    wrapper.unmount()
+  })
+
+  it('applyExport returns to idle when encode fails', async () => {
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+    vi.mocked(exportPng).mockResolvedValueOnce({ ok: false, error: 'webgl2-unavailable' })
+
+    await api.applyExport()
+    expect(api.jobState.value).toBe('idle')
+    wrapper.unmount()
+  })
+
+  it('successful export triggers a tolos.png download', async () => {
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+
+    const blob = new Blob(['png'], { type: 'image/png' })
+    vi.mocked(exportPng).mockResolvedValueOnce({ ok: true, blob })
+
+    let downloaded: HTMLAnchorElement | undefined
+    const originalCreate = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      const el = originalCreate(tagName)
+      if (tagName === 'a') {
+        downloaded = el as HTMLAnchorElement
+      }
+      return el
+    })
+
+    await api.applyExport()
+
+    expect(URL.createObjectURL).toHaveBeenCalledWith(blob)
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:tolos-export')
+    expect(downloaded).toBeDefined()
+    expect(downloaded!.download).toBe('tolos.png')
+    expect(downloaded!.getAttribute('href')).toBe('blob:tolos-export')
+
     wrapper.unmount()
   })
 })

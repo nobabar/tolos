@@ -1,2 +1,2 @@
-// engine/export — reserved for domain logic (no Vue)
-export {}
+export { EXPORT_ASPECT_RATIO, EXPORT_HEIGHT, EXPORT_WIDTH, exportPng } from './export-png'
+export type { ExportPngOptions, ExportPngResult } from './export-png'

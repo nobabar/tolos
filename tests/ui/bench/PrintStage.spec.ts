@@ -76,6 +76,19 @@ describe('PrintStage exposing chrome', () => {
     expect(live.text()).toContain('Exposing...')
   })
 
+  it('does not show exposing veil while exporting', () => {
+    const wrapper = mount(PrintStage, {
+      props: {
+        mountHost: vi.fn<(host: HTMLElement) => void>(),
+        renderError: null,
+        jobState: 'exporting',
+      },
+    })
+
+    expect(wrapper.find('.print-stage__veil').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Exposing...')
+  })
+
   it('hides exposing veil when idle', () => {
     const wrapper = mount(PrintStage, {
       props: {

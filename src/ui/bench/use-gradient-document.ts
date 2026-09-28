@@ -13,6 +13,7 @@ import {
   type ParamFamily,
   type SoftnessParams,
 } from '@/engine/document'
+import { exportPng } from '@/engine/export'
 import { createRenderer, type Renderer } from '@/engine/render'
 
 export type JobState = 'idle' | 'exposing' | 'exporting'
@@ -25,6 +26,8 @@ type FamilyKeyMap = {
   grain: keyof GrainParams
 }
 
+const EXPORT_FILENAME = 'tolos.png'
+
 export type UseGradientDocument = {
   doc: ShallowRef<GradientDocument>
   jobState: ShallowRef<JobState>
@@ -33,6 +36,19 @@ export type UseGradientDocument = {
   applyParam: <F extends ParamFamily>(family: F, key: FamilyKeyMap[F], value: number) => void
   applyRandomize: () => void
   applySeed: (seed: string) => ApplySeedResult
+  applyExport: () => Promise<void>
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.rel = 'noopener'
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 
 export function useGradientDocument(): UseGradientDocument {
@@ -96,6 +112,21 @@ export function useGradientDocument(): UseGradientDocument {
     return 'ok'
   }
 
+  async function applyExport(): Promise<void> {
+    if (jobState.value !== 'idle') return
+    if (renderError.value === 'webgl2-unavailable' || !renderer) return
+
+    jobState.value = 'exporting'
+    try {
+      const result = await exportPng(doc.value)
+      if (result.ok) {
+        triggerDownload(result.blob, EXPORT_FILENAME)
+      }
+    } finally {
+      jobState.value = 'idle'
+    }
+  }
+
   onBeforeUnmount(() => {
     resizeObserver?.disconnect()
     resizeObserver = null
@@ -111,5 +142,6 @@ export function useGradientDocument(): UseGradientDocument {
     applyParam,
     applyRandomize,
     applySeed,
+    applyExport,
   }
 }
