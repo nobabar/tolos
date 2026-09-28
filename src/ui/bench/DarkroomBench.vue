@@ -4,7 +4,7 @@ import ControlRail from './ControlRail.vue'
 import PrintStage from './PrintStage.vue'
 import { useGradientDocument } from './use-gradient-document'
 
-const { mountHost, renderError } = useGradientDocument()
+const { mountHost, renderError, applyRandomize, jobState } = useGradientDocument()
 </script>
 
 <template>
@@ -13,7 +13,11 @@ const { mountHost, renderError } = useGradientDocument()
       <BrandMark />
       <PrintStage :mount-host="mountHost" :render-error="renderError" />
     </div>
-    <ControlRail v-if="!renderError" />
+    <ControlRail
+      v-if="!renderError"
+      :job-state="jobState"
+      :apply-randomize="applyRandomize"
+    />
   </div>
 </template>
 

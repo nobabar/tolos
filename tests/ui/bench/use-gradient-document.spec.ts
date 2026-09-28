@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { defineComponent, nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 
+import { createDocument } from '@/engine/document'
 import type { CreateRendererResult, Renderer } from '@/engine/render'
 import {
   useGradientDocument,
@@ -69,6 +70,38 @@ describe('useGradientDocument', () => {
     api.applyRandomize()
     await nextTick()
     expect(api.doc.value.seed).not.toBe(seedBefore)
+    wrapper.unmount()
+  })
+
+  it('idle applyRandomize yields params reproducible from the new seed', async () => {
+    const { api, wrapper } = mountComposable()
+    api.applyRandomize()
+    await nextTick()
+    expect(api.doc.value.params).toEqual(createDocument(api.doc.value.seed).params)
+    wrapper.unmount()
+  })
+
+  it('applyRandomize leaves seed and params unchanged while exposing', async () => {
+    const { api, wrapper } = mountComposable()
+    const seedBefore = api.doc.value.seed
+    const paramsBefore = structuredClone(api.doc.value.params)
+    api.jobState.value = 'exposing'
+    api.applyRandomize()
+    await nextTick()
+    expect(api.doc.value.seed).toBe(seedBefore)
+    expect(api.doc.value.params).toEqual(paramsBefore)
+    wrapper.unmount()
+  })
+
+  it('applyRandomize leaves seed and params unchanged while exporting', async () => {
+    const { api, wrapper } = mountComposable()
+    const seedBefore = api.doc.value.seed
+    const paramsBefore = structuredClone(api.doc.value.params)
+    api.jobState.value = 'exporting'
+    api.applyRandomize()
+    await nextTick()
+    expect(api.doc.value.seed).toBe(seedBefore)
+    expect(api.doc.value.params).toEqual(paramsBefore)
     wrapper.unmount()
   })
 

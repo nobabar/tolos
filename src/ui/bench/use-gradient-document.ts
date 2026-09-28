@@ -63,6 +63,7 @@ export function useGradientDocument(): UseGradientDocument {
   }
 
   function applyRandomize(): void {
+    if (jobState.value !== 'idle') return
     doc.value = randomize(doc.value)
   }
 
