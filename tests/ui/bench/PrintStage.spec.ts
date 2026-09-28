@@ -9,6 +9,7 @@ describe('PrintStage WebGL blocker', () => {
       props: {
         mountHost: vi.fn<(host: HTMLElement) => void>(),
         renderError: 'webgl2-unavailable',
+        jobState: 'idle',
       },
     })
 
@@ -21,6 +22,7 @@ describe('PrintStage WebGL blocker', () => {
       props: {
         mountHost: vi.fn<(host: HTMLElement) => void>(),
         renderError: 'webgl2-unavailable',
+        jobState: 'idle',
       },
     })
 
@@ -38,10 +40,52 @@ describe('PrintStage WebGL blocker', () => {
       props: {
         mountHost: vi.fn<(host: HTMLElement) => void>(),
         renderError: null,
+        jobState: 'idle',
       },
     })
 
     expect(wrapper.find('.print-stage__blocker').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('tolos needs WebGL in this browser.')
+  })
+})
+
+describe('PrintStage exposing chrome', () => {
+  it('shows veil and Exposing... label while exposing', () => {
+    const wrapper = mount(PrintStage, {
+      props: {
+        mountHost: vi.fn<(host: HTMLElement) => void>(),
+        renderError: null,
+        jobState: 'exposing',
+      },
+    })
+
+    expect(wrapper.find('.print-stage__veil').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Exposing...')
+  })
+
+  it('hides exposing veil when idle', () => {
+    const wrapper = mount(PrintStage, {
+      props: {
+        mountHost: vi.fn<(host: HTMLElement) => void>(),
+        renderError: null,
+        jobState: 'idle',
+      },
+    })
+
+    expect(wrapper.find('.print-stage__veil').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Exposing...')
+  })
+
+  it('does not show exposing veil over the WebGL blocker', () => {
+    const wrapper = mount(PrintStage, {
+      props: {
+        mountHost: vi.fn<(host: HTMLElement) => void>(),
+        renderError: 'webgl2-unavailable',
+        jobState: 'exposing',
+      },
+    })
+
+    expect(wrapper.find('.print-stage__veil').exists()).toBe(false)
+    expect(wrapper.find('.print-stage__blocker').exists()).toBe(true)
   })
 })

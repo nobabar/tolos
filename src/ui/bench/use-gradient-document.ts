@@ -1,4 +1,4 @@
-import { onBeforeUnmount, shallowRef, watch, type ShallowRef } from 'vue'
+import { onBeforeUnmount, shallowRef, type ShallowRef } from 'vue'
 
 import {
   createDocument,
@@ -44,6 +44,17 @@ export function useGradientDocument(): UseGradientDocument {
     renderer.draw(doc.value)
   }
 
+  /** Shared expose path for dial commits and randomize redraw. */
+  function runExposure(mutate: () => void): void {
+    if (jobState.value !== 'idle') return
+    jobState.value = 'exposing'
+    mutate()
+    drawCurrent()
+    requestAnimationFrame(() => {
+      jobState.value = 'idle'
+    })
+  }
+
   function mountHost(host: HTMLElement): void {
     const result = createRenderer(host)
     if (!result.ok) {
@@ -59,17 +70,16 @@ export function useGradientDocument(): UseGradientDocument {
   }
 
   function applyParam<F extends ParamFamily>(family: F, key: FamilyKeyMap[F], value: number): void {
-    doc.value = setParam(doc.value, family, key, value)
+    runExposure(() => {
+      doc.value = setParam(doc.value, family, key, value)
+    })
   }
 
   function applyRandomize(): void {
-    if (jobState.value !== 'idle') return
-    doc.value = randomize(doc.value)
+    runExposure(() => {
+      doc.value = randomize(doc.value)
+    })
   }
-
-  watch(doc, () => {
-    drawCurrent()
-  })
 
   onBeforeUnmount(() => {
     resizeObserver?.disconnect()

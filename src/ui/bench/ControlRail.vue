@@ -1,14 +1,79 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
-import type { JobState } from './use-gradient-document'
+import type { GradientDocument } from '@/engine/document'
+import ParamDial from './ParamDial.vue'
+import type { JobState, UseGradientDocument } from './use-gradient-document'
+
+const DIAL_BINDINGS = [
+  { label: 'Softness', family: 'softness', key: 'amount' },
+  { label: 'Grain', family: 'grain', key: 'amount' },
+  { label: 'Palette', family: 'palette', key: 'energy' },
+] as const
+
+const DIAL_DEBOUNCE_MS = 150
 
 const props = defineProps<{
   jobState: JobState
+  doc: GradientDocument
+  applyParam: UseGradientDocument['applyParam']
   applyRandomize: () => void
 }>()
 
 const busy = computed(() => props.jobState !== 'idle')
+
+/** Local dial values for responsive drag; commit via debounced applyParam. */
+const draft = ref({
+  softness: props.doc.params.softness.amount,
+  grain: props.doc.params.grain.amount,
+  palette: props.doc.params.palette.energy,
+})
+
+watch(
+  () => props.doc,
+  (doc) => {
+    draft.value = {
+      softness: doc.params.softness.amount,
+      grain: doc.params.grain.amount,
+      palette: doc.params.palette.energy,
+    }
+  },
+)
+
+const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+onBeforeUnmount(() => {
+  for (const timer of pendingTimers.values()) clearTimeout(timer)
+  pendingTimers.clear()
+})
+
+function dialValue(family: (typeof DIAL_BINDINGS)[number]['family']): number {
+  return draft.value[family]
+}
+
+function onDialInput(family: (typeof DIAL_BINDINGS)[number]['family'], value: number): void {
+  draft.value = { ...draft.value, [family]: value }
+
+  const timerKey = family
+  const existing = pendingTimers.get(timerKey)
+  if (existing) clearTimeout(existing)
+
+  pendingTimers.set(
+    timerKey,
+    setTimeout(() => {
+      pendingTimers.delete(timerKey)
+      // Drop if busy - do not queue across a busy window (AD-6).
+      if (props.jobState !== 'idle') return
+      commitDial(family, value)
+    }, DIAL_DEBOUNCE_MS),
+  )
+}
+
+function commitDial(family: (typeof DIAL_BINDINGS)[number]['family'], value: number): void {
+  if (family === 'softness') props.applyParam('softness', 'amount', value)
+  else if (family === 'grain') props.applyParam('grain', 'amount', value)
+  else props.applyParam('palette', 'energy', value)
+}
 
 function onNewExposure(): void {
   if (busy.value) return
@@ -17,7 +82,17 @@ function onNewExposure(): void {
 </script>
 
 <template>
-  <aside class="control-rail">
+  <aside class="control-rail" :class="{ 'is-disabled': busy }">
+    <div class="control-rail__dials">
+      <ParamDial
+        v-for="binding in DIAL_BINDINGS"
+        :key="binding.label"
+        :label="binding.label"
+        :model-value="dialValue(binding.family)"
+        :disabled="busy"
+        @update:model-value="onDialInput(binding.family, $event)"
+      />
+    </div>
     <div class="control-rail__actions">
       <button
         type="button"
@@ -39,6 +114,15 @@ function onNewExposure(): void {
   width: 100%;
   max-width: 220px;
   padding-top: calc(var(--type-brand-size) * var(--type-brand-line) + var(--space-5));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.control-rail__dials {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
 }
 
 .control-rail__actions {

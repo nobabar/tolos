@@ -22,6 +22,12 @@ vi.mock('@/engine/render', () => ({
 
 import { createRenderer } from '@/engine/render'
 
+function flushFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve())
+  })
+}
+
 function mountComposable(): {
   api: UseGradientDocument
   wrapper: ReturnType<typeof mount>
@@ -54,13 +60,52 @@ describe('useGradientDocument', () => {
     wrapper.unmount()
   })
 
-  it('applyParam updates document params without page reload', async () => {
+  it('idle applyParam updates param and leaves seed unchanged', async () => {
     const { api, wrapper } = mountComposable()
     const seedBefore = api.doc.value.seed
     api.applyParam('softness', 'amount', 0.42)
     await nextTick()
     expect(api.doc.value.params.softness.amount).toBe(0.42)
     expect(api.doc.value.seed).toBe(seedBefore)
+    await flushFrame()
+    wrapper.unmount()
+  })
+
+  it('busy applyParam leaves document unchanged while exposing', async () => {
+    const { api, wrapper } = mountComposable()
+    const seedBefore = api.doc.value.seed
+    const paramsBefore = structuredClone(api.doc.value.params)
+    api.jobState.value = 'exposing'
+    api.applyParam('softness', 'amount', 0.42)
+    await nextTick()
+    expect(api.doc.value.seed).toBe(seedBefore)
+    expect(api.doc.value.params).toEqual(paramsBefore)
+    wrapper.unmount()
+  })
+
+  it('busy applyParam leaves document unchanged while exporting', async () => {
+    const { api, wrapper } = mountComposable()
+    const seedBefore = api.doc.value.seed
+    const paramsBefore = structuredClone(api.doc.value.params)
+    api.jobState.value = 'exporting'
+    api.applyParam('palette', 'energy', 0.77)
+    await nextTick()
+    expect(api.doc.value.seed).toBe(seedBefore)
+    expect(api.doc.value.params).toEqual(paramsBefore)
+    wrapper.unmount()
+  })
+
+  it('idle applyParam enters exposing then returns to idle after paint', async () => {
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+    draw.mockClear()
+
+    api.applyParam('grain', 'amount', 0.55)
+    expect(api.jobState.value).toBe('exposing')
+    await flushFrame()
+    expect(draw).toHaveBeenCalledWith(api.doc.value)
+    expect(api.jobState.value).toBe('idle')
     wrapper.unmount()
   })
 
@@ -70,6 +115,7 @@ describe('useGradientDocument', () => {
     api.applyRandomize()
     await nextTick()
     expect(api.doc.value.seed).not.toBe(seedBefore)
+    await flushFrame()
     wrapper.unmount()
   })
 
@@ -78,6 +124,21 @@ describe('useGradientDocument', () => {
     api.applyRandomize()
     await nextTick()
     expect(api.doc.value.params).toEqual(createDocument(api.doc.value.seed).params)
+    await flushFrame()
+    wrapper.unmount()
+  })
+
+  it('idle applyRandomize enters exposing then returns to idle after paint', async () => {
+    const { api, wrapper } = mountComposable()
+    const host = document.createElement('div')
+    api.mountHost(host)
+    draw.mockClear()
+
+    api.applyRandomize()
+    expect(api.jobState.value).toBe('exposing')
+    await flushFrame()
+    expect(draw).toHaveBeenCalledWith(api.doc.value)
+    expect(api.jobState.value).toBe('idle')
     wrapper.unmount()
   })
 
@@ -134,7 +195,7 @@ describe('useGradientDocument', () => {
     api.mountHost(host)
     draw.mockClear()
     api.applyParam('grain', 'amount', 0.55)
-    await nextTick()
+    await flushFrame()
     expect(draw).toHaveBeenCalledTimes(1)
     expect(draw).toHaveBeenCalledWith(api.doc.value)
     wrapper.unmount()
