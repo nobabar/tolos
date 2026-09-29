@@ -1,19 +1,35 @@
 import { createPrng } from '../prng'
-import type { GradientParams } from './types'
+import { LOOK_FAMILIES, type GradientParams, type LookFamily } from './types'
+
+export type DerivedDocumentFields = {
+  lookFamily: LookFamily
+  params: GradientParams
+}
 
 /**
- * Fixed PRNG draw order for seed → params.
+ * Fixed PRNG draw order for seed -> document fields.
  *
  * Order:
- *   1. palette.energy
- *   2. softness.amount
- *   3. grain.amount
+ *   1. lookFamily (index into LOOK_FAMILIES)
+ *   2. palette.energy
+ *   3. softness.amount
+ *   4. grain.amount
  */
-export function deriveParamsFromSeed(seed: string): GradientParams {
+export function deriveFromSeed(seed: string): DerivedDocumentFields {
   const prng = createPrng(seed)
+  const familyIndex = Math.min(2, Math.floor(prng.nextFloat01() * 3))
+  const lookFamily = LOOK_FAMILIES[familyIndex]!
   return {
-    palette: { energy: prng.nextFloat01() },
-    softness: { amount: prng.nextFloat01() },
-    grain: { amount: prng.nextFloat01() },
+    lookFamily,
+    params: {
+      palette: { energy: prng.nextFloat01() },
+      softness: { amount: prng.nextFloat01() },
+      grain: { amount: prng.nextFloat01() },
+    },
   }
+}
+
+/** Params only; uses the same draw order as deriveFromSeed (lookFamily draw runs first). */
+export function deriveParamsFromSeed(seed: string): GradientParams {
+  return deriveFromSeed(seed).params
 }
