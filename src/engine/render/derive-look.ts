@@ -10,6 +10,12 @@ export const ANCHOR_COUNT = MAX_ANCHORS
 /** Flow palette stops uploaded to the shader (active count is 3-5). */
 export const MAX_FLOW_STOPS = 5 as const
 
+/** Silk always mixes three RGB stops. */
+export const SILK_COLOR_COUNT = 3 as const
+
+/** Shader iteration cap (main-thread full-screen). Seeded count is 4-8. */
+export const SILK_MAX_ITERATIONS = 8 as const
+
 export type ColorAnchor = {
   x: number
   y: number
@@ -42,6 +48,22 @@ export type FlowUniforms = {
 export type DerivedFlowLook = {
   stops: [number, number, number][]
   uniforms: FlowUniforms
+}
+
+export type SilkUniforms = {
+  softness: number
+  grain: number
+  energy: number
+  seedHash: number
+  foldAngle: number
+  foldFreq: number
+  sheenStrength: number
+  iterations: number
+}
+
+export type DerivedSilkLook = {
+  colors: [[number, number, number], [number, number, number], [number, number, number]]
+  uniforms: SilkUniforms
 }
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
@@ -168,6 +190,54 @@ export function deriveFlowLook(doc: GradientDocument): DerivedFlowLook {
   }
 }
 
+/**
+ * Silk folds + tri-color from stream `look:${seed}`. Draw order:
+ * 1. baseHue
+ * 2. foldAngle
+ * 3. foldFreq
+ * 4. sheenStrength
+ * 5. iterations -> integer in [4, 8]
+ * 6. per color (3): hueJitter, satNoise, litNoise
+ */
+export function deriveSilkLook(doc: GradientDocument): DerivedSilkLook {
+  const prng = createPrng(`look:${doc.seed}`)
+  const energy = doc.params.palette.energy
+
+  const baseHue = prng.nextFloat01()
+  const foldAngle = prng.nextFloat01() * Math.PI * 2
+  const foldFreq = 3.5 + prng.nextFloat01() * 6.5
+  const sheenStrength = 0.25 + prng.nextFloat01() * 0.55
+  const iterations = 4 + Math.floor(prng.nextFloat01() * (SILK_MAX_ITERATIONS - 3))
+
+  const hueSpans = [0, 0.18, 0.52]
+  const colors: [[number, number, number], [number, number, number], [number, number, number]] = [
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+  ]
+  for (let i = 0; i < SILK_COLOR_COUNT; i += 1) {
+    const hueJitter = (prng.nextFloat01() - 0.5) * 0.07
+    const sat = 0.42 + energy * 0.4 + prng.nextFloat01() * 0.16
+    const lit = 0.3 + prng.nextFloat01() * 0.44 + energy * 0.1
+    const hue = baseHue + (hueSpans[i] ?? 0) + hueJitter
+    colors[i] = hslToRgb(hue, Math.min(1, sat), Math.min(0.88, lit))
+  }
+
+  return {
+    colors,
+    uniforms: {
+      softness: doc.params.softness.amount,
+      grain: doc.params.grain.amount,
+      energy,
+      seedHash: hashSeedToUint32(doc.seed) / 4294967296,
+      foldAngle,
+      foldFreq,
+      sheenStrength,
+      iterations,
+    },
+  }
+}
+
 export function deriveLookFromDocument(doc: GradientDocument): DerivedLook {
   switch (doc.lookFamily) {
     case 'blob':
@@ -176,7 +246,7 @@ export function deriveLookFromDocument(doc: GradientDocument): DerivedLook {
       // Flow paint uses deriveFlowLook.
       return deriveBlobLook(doc)
     case 'silk':
-      // Temporary: blob composition until silk shader lands.
+      // Silk paint uses deriveSilkLook.
       return deriveBlobLook(doc)
   }
 }

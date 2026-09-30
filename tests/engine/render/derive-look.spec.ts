@@ -4,8 +4,10 @@ import { createDocument, setParam, type GradientDocument } from '@/engine/docume
 import {
   MAX_ANCHORS,
   MAX_FLOW_STOPS,
+  SILK_COLOR_COUNT,
   deriveFlowLook,
   deriveLookFromDocument,
+  deriveSilkLook,
 } from '@/engine/render/derive-look'
 
 function withFamily(doc: GradientDocument, lookFamily: GradientDocument['lookFamily']): GradientDocument {
@@ -18,6 +20,10 @@ function blobDoc(seed: string): GradientDocument {
 
 function flowDoc(seed: string): GradientDocument {
   return withFamily(createDocument(seed), 'flow')
+}
+
+function silkDoc(seed: string): GradientDocument {
+  return withFamily(createDocument(seed), 'silk')
 }
 
 describe('deriveLookFromDocument', () => {
@@ -94,12 +100,6 @@ describe('deriveLookFromDocument', () => {
     expect(softLook.uniforms.softness).not.toBe(baseLook.uniforms.softness)
   })
 
-  it('silk still derives a paint-able look (temporary blob fallback)', () => {
-    const look = deriveLookFromDocument(withFamily(createDocument('fallback-silk'), 'silk'))
-    expect(look.anchors.length).toBeGreaterThanOrEqual(4)
-    expect(look.anchors.length).toBeLessThanOrEqual(6)
-    expect(look.uniforms.softness).toBeTypeOf('number')
-  })
 })
 
 describe('deriveFlowLook', () => {
@@ -146,5 +146,67 @@ describe('deriveFlowLook', () => {
     expect(look.uniforms.seedHash).toBeTypeOf('number')
     expect(spy).not.toHaveBeenCalled()
     spy.mockRestore()
+  })
+})
+
+describe('deriveSilkLook', () => {
+  it('same seed and schema yield identical silk uniforms and colors', () => {
+    const doc = silkDoc('silk-seed-a')
+    expect(deriveSilkLook(doc)).toEqual(deriveSilkLook(doc))
+  })
+
+  it('different seeds yield different silk fold params', () => {
+    const a = deriveSilkLook(silkDoc('silk-seed-a'))
+    const b = deriveSilkLook(silkDoc('silk-seed-b'))
+    expect(a).not.toEqual(b)
+  })
+
+  it('always returns three rgb stops in [0, 1]', () => {
+    for (let i = 0; i < 30; i += 1) {
+      const look = deriveSilkLook(silkDoc(`silk-colors-${i}`))
+      expect(look.colors).toHaveLength(SILK_COLOR_COUNT)
+      for (const rgb of look.colors) {
+        expect(rgb).toHaveLength(3)
+        for (const channel of rgb) {
+          expect(channel).toBeGreaterThanOrEqual(0)
+          expect(channel).toBeLessThanOrEqual(1)
+        }
+      }
+    }
+  })
+
+  it('packs soft/grain/energy and seeded fold params without Math.random', () => {
+    const spy = vi.spyOn(Math, 'random')
+    const doc = setParam(
+      setParam(silkDoc('silk-uniforms'), 'softness', 'amount', 0.65),
+      'grain',
+      'amount',
+      0.35,
+    )
+    const look = deriveSilkLook(doc)
+
+    expect(look.uniforms.softness).toBe(0.65)
+    expect(look.uniforms.grain).toBe(0.35)
+    expect(look.uniforms.energy).toBe(doc.params.palette.energy)
+    expect(look.uniforms.foldAngle).toBeGreaterThanOrEqual(0)
+    expect(look.uniforms.foldAngle).toBeLessThanOrEqual(Math.PI * 2)
+    expect(look.uniforms.foldFreq).toBeGreaterThan(0)
+    expect(look.uniforms.sheenStrength).toBeGreaterThan(0)
+    expect(look.uniforms.iterations).toBeGreaterThanOrEqual(4)
+    expect(look.uniforms.iterations).toBeLessThanOrEqual(8)
+    expect(look.uniforms.seedHash).toBeTypeOf('number')
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('iteration count varies across seeds within [4, 8]', () => {
+    const counts = new Set<number>()
+    for (let i = 0; i < 50; i += 1) {
+      const look = deriveSilkLook(silkDoc(`silk-iters-${i}`))
+      expect(look.uniforms.iterations).toBeGreaterThanOrEqual(4)
+      expect(look.uniforms.iterations).toBeLessThanOrEqual(8)
+      counts.add(look.uniforms.iterations)
+    }
+    expect(counts.size).toBeGreaterThan(1)
   })
 })

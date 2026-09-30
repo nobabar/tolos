@@ -132,4 +132,23 @@ describe('exportPng', () => {
     expect(result).toEqual({ ok: true, blob: pngBlob })
     expect(gl.viewport).toHaveBeenCalledWith(0, 0, 640, 360)
   })
+
+  it('renders silk documents through paintDocument without mock GL gaps', async () => {
+    const gl = createMockGl()
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(gl)
+
+    const pngBlob = new Blob(['png'], { type: 'image/png' })
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+      callback(pngBlob)
+    })
+
+    const doc = { ...createDocument(createOpaqueSeed()), lookFamily: 'silk' as const }
+    const result = await exportPng(doc)
+
+    expect(result).toEqual({ ok: true, blob: pngBlob })
+    expect(gl.viewport).toHaveBeenCalledWith(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT)
+    expect(gl.uniform3fv).toHaveBeenCalled()
+    expect(gl.drawArrays).toHaveBeenCalled()
+    expect(gl.deleteProgram).toHaveBeenCalled()
+  })
 })

@@ -1,7 +1,15 @@
 import type { GradientDocument } from '../document'
-import { MAX_ANCHORS, MAX_FLOW_STOPS, deriveFlowLook, deriveLookFromDocument } from './derive-look'
+import {
+  MAX_ANCHORS,
+  MAX_FLOW_STOPS,
+  SILK_COLOR_COUNT,
+  deriveFlowLook,
+  deriveLookFromDocument,
+  deriveSilkLook,
+} from './derive-look'
 import flowFragSource from './flow.frag.glsl?raw'
 import organicFragSource from './organic.frag.glsl?raw'
+import silkFragSource from './silk.frag.glsl?raw'
 import vertSource from './organic.vert.glsl?raw'
 
 export type BlobProgramLocations = {
@@ -32,10 +40,26 @@ export type FlowProgramLocations = {
   uStopCount: WebGLUniformLocation
 }
 
+export type SilkProgramLocations = {
+  program: WebGLProgram
+  aPos: number
+  uResolution: WebGLUniformLocation
+  uSoftness: WebGLUniformLocation
+  uGrain: WebGLUniformLocation
+  uEnergy: WebGLUniformLocation
+  uSeed: WebGLUniformLocation
+  uFoldAngle: WebGLUniformLocation
+  uFoldFreq: WebGLUniformLocation
+  uSheen: WebGLUniformLocation
+  uIterations: WebGLUniformLocation
+  uColors: WebGLUniformLocation
+}
+
 export type GlState = {
   gl: WebGL2RenderingContext
   blob: BlobProgramLocations
   flow: FlowProgramLocations
+  silk: SilkProgramLocations
   vao: WebGLVertexArrayObject
   buffer: WebGLBuffer
 }
@@ -172,17 +196,68 @@ function buildFlowProgram(gl: WebGL2RenderingContext, vert: WebGLShader): FlowPr
   }
 }
 
-/** Build blob + flow programs and a shared fullscreen triangle. */
+function buildSilkProgram(gl: WebGL2RenderingContext, vert: WebGLShader): SilkProgramLocations | null {
+  const frag = compileShader(gl, gl.FRAGMENT_SHADER, silkFragSource)
+  if (!frag) return null
+  const program = linkProgram(gl, vert, frag)
+  gl.deleteShader(frag)
+  if (!program) return null
+
+  const uniforms = requireUniforms(gl, program, [
+    'u_resolution',
+    'u_softness',
+    'u_grain',
+    'u_energy',
+    'u_seed',
+    'u_foldAngle',
+    'u_foldFreq',
+    'u_sheen',
+    'u_iterations',
+    'u_colors',
+  ])
+  if (!uniforms) return null
+  const [
+    uResolution,
+    uSoftness,
+    uGrain,
+    uEnergy,
+    uSeed,
+    uFoldAngle,
+    uFoldFreq,
+    uSheen,
+    uIterations,
+    uColors,
+  ] = uniforms
+
+  return {
+    program,
+    aPos: gl.getAttribLocation(program, 'a_pos'),
+    uResolution: uResolution!,
+    uSoftness: uSoftness!,
+    uGrain: uGrain!,
+    uEnergy: uEnergy!,
+    uSeed: uSeed!,
+    uFoldAngle: uFoldAngle!,
+    uFoldFreq: uFoldFreq!,
+    uSheen: uSheen!,
+    uIterations: uIterations!,
+    uColors: uColors!,
+  }
+}
+
+/** Build blob, flow, and silk programs with a shared fullscreen triangle. */
 export function buildGlState(gl: WebGL2RenderingContext): GlState | null {
   const vert = compileShader(gl, gl.VERTEX_SHADER, vertSource)
   if (!vert) return null
 
   const blob = buildBlobProgram(gl, vert)
   const flow = buildFlowProgram(gl, vert)
+  const silk = buildSilkProgram(gl, vert)
   gl.deleteShader(vert)
-  if (!blob || !flow) {
+  if (!blob || !flow || !silk) {
     if (blob) gl.deleteProgram(blob.program)
     if (flow) gl.deleteProgram(flow.program)
+    if (silk) gl.deleteProgram(silk.program)
     return null
   }
 
@@ -191,10 +266,11 @@ export function buildGlState(gl: WebGL2RenderingContext): GlState | null {
   if (!vao || !buffer) {
     gl.deleteProgram(blob.program)
     gl.deleteProgram(flow.program)
+    gl.deleteProgram(silk.program)
     return null
   }
 
-  // Both programs use layout(location = 0) for a_pos.
+  // All programs use layout(location = 0) for a_pos.
   gl.bindVertexArray(vao)
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
@@ -202,7 +278,7 @@ export function buildGlState(gl: WebGL2RenderingContext): GlState | null {
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
   gl.bindVertexArray(null)
 
-  return { gl, blob, flow, vao, buffer }
+  return { gl, blob, flow, silk, vao, buffer }
 }
 
 /** Organic anchor + warp path (blob family). Zero-radius slots stay inactive. */
@@ -287,10 +363,44 @@ function paintFlowDocument(
   gl.bindVertexArray(null)
 }
 
-/**
- * Paint a document at an explicit pixel size (shared by preview and export).
- * silk temporarily reuses the blob path until its family shader lands.
- */
+/** Directional fold + sheen path (silk family). */
+function paintSilkDocument(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+): void {
+  const { gl, silk, vao } = state
+  const look = deriveSilkLook(doc)
+  const { colors, uniforms } = look
+
+  const colorRgb = new Float32Array(SILK_COLOR_COUNT * 3)
+  for (let i = 0; i < SILK_COLOR_COUNT; i += 1) {
+    const rgb = colors[i]
+    colorRgb[i * 3] = rgb[0]
+    colorRgb[i * 3 + 1] = rgb[1]
+    colorRgb[i * 3 + 2] = rgb[2]
+  }
+
+  gl.viewport(0, 0, width, height)
+  gl.useProgram(silk.program)
+  gl.uniform2f(silk.uResolution, width, height)
+  gl.uniform1f(silk.uSoftness, uniforms.softness)
+  gl.uniform1f(silk.uGrain, uniforms.grain)
+  gl.uniform1f(silk.uEnergy, uniforms.energy)
+  gl.uniform1f(silk.uSeed, uniforms.seedHash)
+  gl.uniform1f(silk.uFoldAngle, uniforms.foldAngle)
+  gl.uniform1f(silk.uFoldFreq, uniforms.foldFreq)
+  gl.uniform1f(silk.uSheen, uniforms.sheenStrength)
+  gl.uniform1f(silk.uIterations, uniforms.iterations)
+  gl.uniform3fv(silk.uColors, colorRgb)
+
+  gl.bindVertexArray(vao)
+  gl.drawArrays(gl.TRIANGLES, 0, 3)
+  gl.bindVertexArray(null)
+}
+
+/** Paint a document at an explicit pixel size (shared by preview and export). */
 export function paintDocument(
   state: GlState,
   doc: GradientDocument,
@@ -305,7 +415,7 @@ export function paintDocument(
       paintFlowDocument(state, doc, width, height)
       return
     case 'silk':
-      paintBlobDocument(state, doc, width, height)
+      paintSilkDocument(state, doc, width, height)
       return
   }
 }
@@ -316,4 +426,5 @@ export function disposeGlState(state: GlState): void {
   state.gl.deleteVertexArray(state.vao)
   state.gl.deleteProgram(state.blob.program)
   state.gl.deleteProgram(state.flow.program)
+  state.gl.deleteProgram(state.silk.program)
 }
