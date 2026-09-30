@@ -1,5 +1,5 @@
 import type { GradientDocument } from '../document'
-import { ANCHOR_COUNT, deriveLookFromDocument } from './derive-look'
+import { MAX_ANCHORS, deriveLookFromDocument } from './derive-look'
 import fragSource from './organic.frag.glsl?raw'
 import vertSource from './organic.vert.glsl?raw'
 
@@ -29,6 +29,7 @@ function compileShader(gl: WebGL2RenderingContext, type: number, source: string)
   gl.shaderSource(shader, source)
   gl.compileShader(shader)
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error('[tolos] shader compile failed', gl.getShaderInfoLog(shader))
     gl.deleteShader(shader)
     return null
   }
@@ -46,6 +47,7 @@ function linkProgram(
   gl.attachShader(program, frag)
   gl.linkProgram(program)
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('[tolos] program link failed', gl.getProgramInfoLog(program))
     gl.deleteProgram(program)
     return null
   }
@@ -119,8 +121,8 @@ export function buildGlState(gl: WebGL2RenderingContext): GlState | null {
   return { gl, locations, vao, buffer }
 }
 
-/** Paint a document at an explicit pixel size (shared by preview and export). */
-export function paintDocument(
+/** Organic anchor + warp path (blob family). Zero-radius slots stay inactive. */
+function paintBlobDocument(
   state: GlState,
   doc: GradientDocument,
   width: number,
@@ -130,12 +132,15 @@ export function paintDocument(
   const look = deriveLookFromDocument(doc)
   const { anchors, uniforms } = look
 
-  const pos = new Float32Array(ANCHOR_COUNT * 2)
-  const rgb = new Float32Array(ANCHOR_COUNT * 3)
-  const radii = new Float32Array(ANCHOR_COUNT)
-  for (let i = 0; i < ANCHOR_COUNT; i += 1) {
+  const pos = new Float32Array(MAX_ANCHORS * 2)
+  const rgb = new Float32Array(MAX_ANCHORS * 3)
+  const radii = new Float32Array(MAX_ANCHORS)
+  for (let i = 0; i < MAX_ANCHORS; i += 1) {
     const a = anchors[i]
-    if (!a) continue
+    if (!a) {
+      radii[i] = 0
+      continue
+    }
     pos[i * 2] = a.x
     pos[i * 2 + 1] = a.y
     rgb[i * 3] = a.rgb[0]
@@ -158,6 +163,28 @@ export function paintDocument(
   gl.bindVertexArray(vao)
   gl.drawArrays(gl.TRIANGLES, 0, 3)
   gl.bindVertexArray(null)
+}
+
+/**
+ * Paint a document at an explicit pixel size (shared by preview and export).
+ * flow/silk temporarily reuse the blob path until family shaders land.
+ */
+export function paintDocument(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+): void {
+  switch (doc.lookFamily) {
+    case 'blob':
+      paintBlobDocument(state, doc, width, height)
+      return
+    case 'flow':
+    case 'silk':
+      // Temporary fallback: same organic paint until family shaders land.
+      paintBlobDocument(state, doc, width, height)
+      return
+  }
 }
 
 /** Release GL objects owned by a paint target. */

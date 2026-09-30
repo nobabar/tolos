@@ -9,9 +9,9 @@ uniform float u_softness;
 uniform float u_grain;
 uniform float u_energy;
 uniform float u_seed;
-uniform vec2 u_anchorPos[5];
-uniform vec3 u_anchorRgb[5];
-uniform float u_anchorRadius[5];
+uniform vec2 u_anchorPos[6];
+uniform vec3 u_anchorRgb[6];
+uniform float u_anchorRadius[6];
 
 float hash21(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
@@ -59,12 +59,15 @@ void main() {
   vec3 color = vec3(0.0);
   float weightSum = 0.0;
 
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 6; i++) {
+    float radius = u_anchorRadius[i];
+    // Inactive slots are uploaded with radius 0
+    float slotLive = step(0.001, radius);
     vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
-    float radius = u_anchorRadius[i] * mix(0.9, 1.7, u_softness);
-    float d = length(p - ap) / max(radius, 0.001);
+    float r = radius * mix(0.9, 1.7, u_softness);
+    float d = length(p - ap) / max(r, 0.001);
     float w = pow(max(0.0, 1.0 - d), falloff * 1.4);
-    w = w * w;
+    w = w * w * slotLive;
     color += u_anchorRgb[i] * w;
     weightSum += w;
   }

@@ -1,7 +1,11 @@
 import { createPrng, hashSeedToUint32 } from '../prng'
 import type { GradientDocument } from '../document'
 
-export const ANCHOR_COUNT = 5 as const
+/** Shader / uniform slot capacity. Active blob anchors are 4-6. */
+export const MAX_ANCHORS = 6 as const
+
+/** Alias for MAX_ANCHORS (uniform buffer length). */
+export const ANCHOR_COUNT = MAX_ANCHORS
 
 export type ColorAnchor = {
   x: number
@@ -42,17 +46,40 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [hk(hue + 1 / 3), hk(hue), hk(hue - 1 / 3)]
 }
 
-export function deriveLookFromDocument(doc: GradientDocument): DerivedLook {
+/**
+ * Blob composition from stream `look:${seed}`. Draw order:
+ * 1. baseHue
+ * 2. anchorCount -> integer in [4, 6]
+ * 3. biasAxis -> 0 = horizontal off-center, 1 = vertical third
+ * 4. biasThird -> 0..2 (left/center/right or top/mid/bottom)
+ * 5. biasStrength
+ * 6. per active anchor: x, y, pullMix, radius, hueJitter, satNoise, litNoise
+ * Inactive slots are omitted from `anchors` (paint zeros remaining uniform slots).
+ */
+function deriveBlobLook(doc: GradientDocument): DerivedLook {
   const prng = createPrng(`look:${doc.seed}`)
   const energy = doc.params.palette.energy
-  const anchors: ColorAnchor[] = []
 
   const baseHue = prng.nextFloat01()
-  const hueOffsets = [0, 0.08, 0.42, 0.55, 0.78]
+  const anchorCount = 4 + Math.floor(prng.nextFloat01() * 3)
+  const biasAxis = prng.nextFloat01() < 0.5 ? 0 : 1
+  const biasThird = Math.floor(prng.nextFloat01() * 3)
+  const biasStrength = 0.35 + prng.nextFloat01() * 0.4
+  const biasCenter = (biasThird + 0.5) / 3
 
-  for (let i = 0; i < ANCHOR_COUNT; i += 1) {
-    const x = 0.08 + prng.nextFloat01() * 0.84
-    const y = 0.08 + prng.nextFloat01() * 0.84
+  const hueOffsets = [0, 0.08, 0.42, 0.55, 0.78, 0.22]
+  const anchors: ColorAnchor[] = []
+
+  for (let i = 0; i < anchorCount; i += 1) {
+    let x = 0.08 + prng.nextFloat01() * 0.84
+    let y = 0.08 + prng.nextFloat01() * 0.84
+    const pull = biasStrength * (0.45 + prng.nextFloat01() * 0.55)
+    if (biasAxis === 0) {
+      x = x + (biasCenter - x) * pull
+    } else {
+      y = y + (biasCenter - y) * pull
+    }
+
     const radius = 0.38 + prng.nextFloat01() * 0.55
     const hueJitter = (prng.nextFloat01() - 0.5) * 0.06
     const hue = baseHue + (hueOffsets[i] ?? 0) + hueJitter
@@ -74,5 +101,16 @@ export function deriveLookFromDocument(doc: GradientDocument): DerivedLook {
       energy,
       seedHash: hashSeedToUint32(doc.seed) / 4294967296,
     },
+  }
+}
+
+export function deriveLookFromDocument(doc: GradientDocument): DerivedLook {
+  switch (doc.lookFamily) {
+    case 'blob':
+      return deriveBlobLook(doc)
+    case 'flow':
+    case 'silk':
+      // Temporary: blob composition until family shaders land.
+      return deriveBlobLook(doc)
   }
 }
