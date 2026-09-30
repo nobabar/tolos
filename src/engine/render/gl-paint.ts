@@ -376,7 +376,7 @@ function paintSilkDocument(
 
   const colorRgb = new Float32Array(SILK_COLOR_COUNT * 3)
   for (let i = 0; i < SILK_COLOR_COUNT; i += 1) {
-    const rgb = colors[i]
+    const rgb = colors[i] ?? [0, 0, 0]
     colorRgb[i * 3] = rgb[0]
     colorRgb[i * 3 + 1] = rgb[1]
     colorRgb[i * 3 + 2] = rgb[2]
