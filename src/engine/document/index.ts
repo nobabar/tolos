@@ -2,11 +2,13 @@ export type {
   GradientDocument,
   GradientDocumentV1,
   GradientDocumentV2,
+  GradientDocumentV3,
   GradientParams,
   GrainParams,
   LookFamily,
   LookFamilyMode,
   PaletteParams,
+  ParamLocks,
   SoftnessParams,
 } from './types'
 export { LOOK_FAMILIES, SCHEMA_VERSION } from './types'
@@ -20,6 +22,7 @@ export {
   setLookFamily,
   setLookFamilyMode,
   setParam,
+  setParamLock,
   setSeed,
   type ParamFamily,
 } from './commands'

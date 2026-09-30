@@ -4,10 +4,12 @@ import {
   type GradientDocument,
   type GradientDocumentV1,
   type GradientDocumentV2,
+  type GradientDocumentV3,
   type GrainParams,
   type LookFamily,
   type LookFamilyMode,
   type PaletteParams,
+  type ParamLocks,
   type SoftnessParams,
 } from './types'
 
@@ -19,12 +21,28 @@ type FamilyKeyMap = {
   grain: keyof GrainParams
 }
 
+const UNLOCKED: ParamLocks = {
+  palette: false,
+  softness: false,
+  grain: false,
+}
+
 function isLookFamily(value: unknown): value is LookFamily {
   return value === 'blob' || value === 'flow' || value === 'silk'
 }
 
 function isLookFamilyMode(value: unknown): value is LookFamilyMode {
   return value === 'random' || isLookFamily(value)
+}
+
+function isParamLocks(value: unknown): value is ParamLocks {
+  if (typeof value !== 'object' || value === null) return false
+  const locks = value as Record<string, unknown>
+  return (
+    typeof locks.palette === 'boolean' &&
+    typeof locks.softness === 'boolean' &&
+    typeof locks.grain === 'boolean'
+  )
 }
 
 /** Encode entropy bytes as an opaque hex seed. */
@@ -41,6 +59,7 @@ export function createDocument(seed: string): GradientDocument {
     seed,
     lookFamily: derived.lookFamily,
     lookFamilyMode: 'random',
+    paramLocks: { ...UNLOCKED },
     params: derived.params,
   }
 }
@@ -48,6 +67,7 @@ export function createDocument(seed: string): GradientDocument {
 /**
  * New crypto seed -> derive lookFamily + params from prng(newSeed).
  * Fixed lookFamilyMode pins assigned family after the family PRNG draw.
+ * Locked dials keep prior amounts after the full derive stream is consumed.
  */
 export function randomize(doc: GradientDocument): GradientDocument {
   const seed = createOpaqueSeed()
@@ -59,22 +79,40 @@ export function randomize(doc: GradientDocument): GradientDocument {
     seed,
     lookFamily,
     lookFamilyMode: doc.lookFamilyMode,
-    params: derived.params,
+    paramLocks: doc.paramLocks,
+    params: {
+      palette: {
+        energy: doc.paramLocks.palette
+          ? doc.params.palette.energy
+          : derived.params.palette.energy,
+      },
+      softness: {
+        amount: doc.paramLocks.softness
+          ? doc.params.softness.amount
+          : derived.params.softness.amount,
+      },
+      grain: {
+        amount: doc.paramLocks.grain
+          ? doc.params.grain.amount
+          : derived.params.grain.amount,
+      },
+    },
   }
 }
 
-/** Replace seed only. Params, lookFamily, and lookFamilyMode stay as-is. */
+/** Replace seed only. Params, lookFamily, mode, and locks stay as-is. */
 export function setSeed(doc: GradientDocument, seed: string): GradientDocument {
   return {
     schemaVersion: SCHEMA_VERSION,
     seed,
     lookFamily: doc.lookFamily,
     lookFamilyMode: doc.lookFamilyMode,
+    paramLocks: doc.paramLocks,
     params: doc.params,
   }
 }
 
-/** Store discovery mode only. Seed, params, and lookFamily stay as-is. */
+/** Store discovery mode only. Seed, params, lookFamily, and locks stay as-is. */
 export function setLookFamilyMode(
   doc: GradientDocument,
   mode: LookFamilyMode,
@@ -85,6 +123,7 @@ export function setLookFamilyMode(
       seed: doc.seed,
       lookFamily: doc.lookFamily,
       lookFamilyMode: doc.lookFamilyMode,
+      paramLocks: doc.paramLocks,
       params: doc.params,
     }
   }
@@ -93,6 +132,7 @@ export function setLookFamilyMode(
     seed: doc.seed,
     lookFamily: doc.lookFamily,
     lookFamilyMode: mode,
+    paramLocks: doc.paramLocks,
     params: doc.params,
   }
 }
@@ -111,6 +151,7 @@ export function setLookFamily(
       seed: doc.seed,
       lookFamily: doc.lookFamily,
       lookFamilyMode: doc.lookFamilyMode,
+      paramLocks: doc.paramLocks,
       params: doc.params,
     }
   }
@@ -119,6 +160,26 @@ export function setLookFamily(
     seed: doc.seed,
     lookFamily: family,
     lookFamilyMode: doc.lookFamilyMode === 'random' ? 'random' : family,
+    paramLocks: doc.paramLocks,
+    params: doc.params,
+  }
+}
+
+/** Toggle one dial lock. Seed, params, lookFamily, and mode stay as-is. */
+export function setParamLock(
+  doc: GradientDocument,
+  family: ParamFamily,
+  locked: boolean,
+): GradientDocument {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    seed: doc.seed,
+    lookFamily: doc.lookFamily,
+    lookFamilyMode: doc.lookFamilyMode,
+    paramLocks: {
+      ...doc.paramLocks,
+      [family]: locked,
+    },
     params: doc.params,
   }
 }
@@ -139,6 +200,7 @@ export function setParam<F extends ParamFamily>(
     seed: doc.seed,
     lookFamily: doc.lookFamily,
     lookFamilyMode: doc.lookFamilyMode,
+    paramLocks: doc.paramLocks,
     params: {
       ...doc.params,
       [family]: {
@@ -150,7 +212,11 @@ export function setParam<F extends ParamFamily>(
 }
 
 export function normalizeDocument(
-  doc: GradientDocument | GradientDocumentV1 | GradientDocumentV2,
+  doc:
+    | GradientDocument
+    | GradientDocumentV1
+    | GradientDocumentV2
+    | GradientDocumentV3,
 ): GradientDocument {
   if (doc.schemaVersion === 1) {
     return {
@@ -158,6 +224,7 @@ export function normalizeDocument(
       seed: doc.seed,
       lookFamily: 'blob',
       lookFamilyMode: 'random',
+      paramLocks: { ...UNLOCKED },
       params: doc.params,
     }
   }
@@ -167,12 +234,18 @@ export function normalizeDocument(
     'lookFamilyMode' in doc && isLookFamilyMode(doc.lookFamilyMode)
       ? doc.lookFamilyMode
       : 'random'
+  const paramLocks =
+    'paramLocks' in doc && isParamLocks(doc.paramLocks)
+      ? doc.paramLocks
+      : { ...UNLOCKED }
 
   if (
     doc.schemaVersion === SCHEMA_VERSION &&
     isLookFamily(doc.lookFamily) &&
     'lookFamilyMode' in doc &&
-    isLookFamilyMode(doc.lookFamilyMode)
+    isLookFamilyMode(doc.lookFamilyMode) &&
+    'paramLocks' in doc &&
+    isParamLocks(doc.paramLocks)
   ) {
     return doc
   }
@@ -182,6 +255,7 @@ export function normalizeDocument(
     seed: doc.seed,
     lookFamily,
     lookFamilyMode,
+    paramLocks,
     params: doc.params,
   }
 }
