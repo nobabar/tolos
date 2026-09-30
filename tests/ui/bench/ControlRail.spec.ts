@@ -13,14 +13,16 @@ function mockApplyParam() {
   return vi.fn<UseGradientDocument['applyParam']>()
 }
 
-function railProps(overrides: Partial<{
-  jobState: 'idle' | 'exposing' | 'exporting'
-  doc: ReturnType<typeof sampleDoc>
-  applyParam: UseGradientDocument['applyParam']
-  applyRandomize: () => void
-  applySeed: UseGradientDocument['applySeed']
-  applyExport: () => Promise<void>
-}> = {}) {
+function railProps(
+  overrides: Partial<{
+    jobState: 'idle' | 'exposing' | 'exporting'
+    doc: ReturnType<typeof sampleDoc>
+    applyParam: UseGradientDocument['applyParam']
+    applyRandomize: () => void
+    applySeed: UseGradientDocument['applySeed']
+    applyExport: () => Promise<void>
+  }> = {},
+) {
   return {
     jobState: 'idle' as const,
     doc: sampleDoc(),

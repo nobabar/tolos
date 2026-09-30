@@ -10,7 +10,10 @@ import {
   deriveSilkLook,
 } from '@/engine/render/derive-look'
 
-function withFamily(doc: GradientDocument, lookFamily: GradientDocument['lookFamily']): GradientDocument {
+function withFamily(
+  doc: GradientDocument,
+  lookFamily: GradientDocument['lookFamily'],
+): GradientDocument {
   return { ...doc, lookFamily }
 }
 
@@ -35,9 +38,9 @@ describe('deriveLookFromDocument', () => {
   it('same seed and blob family yield identical count, positions, and radii', () => {
     const a = deriveLookFromDocument(blobDoc('blob-determinism'))
     const b = deriveLookFromDocument(blobDoc('blob-determinism'))
-    expect(a.anchors.map((anchor) => ({ x: anchor.x, y: anchor.y, radius: anchor.radius }))).toEqual(
-      b.anchors.map((anchor) => ({ x: anchor.x, y: anchor.y, radius: anchor.radius })),
-    )
+    expect(
+      a.anchors.map((anchor) => ({ x: anchor.x, y: anchor.y, radius: anchor.radius })),
+    ).toEqual(b.anchors.map((anchor) => ({ x: anchor.x, y: anchor.y, radius: anchor.radius })))
   })
 
   it('different seeds yield different anchors', () => {
@@ -93,13 +96,10 @@ describe('deriveLookFromDocument', () => {
     const baseLook = deriveLookFromDocument(base)
     const softLook = deriveLookFromDocument(soft)
 
-    expect(softLook.anchors.map((a) => [a.x, a.y])).toEqual(
-      baseLook.anchors.map((a) => [a.x, a.y]),
-    )
+    expect(softLook.anchors.map((a) => [a.x, a.y])).toEqual(baseLook.anchors.map((a) => [a.x, a.y]))
     expect(softLook.uniforms.softness).toBe(0.9)
     expect(softLook.uniforms.softness).not.toBe(baseLook.uniforms.softness)
   })
-
 })
 
 describe('deriveFlowLook', () => {
@@ -134,7 +134,12 @@ describe('deriveFlowLook', () => {
 
   it('packs soft/grain/energy and seeded field params without Math.random', () => {
     const spy = vi.spyOn(Math, 'random')
-    const doc = setParam(setParam(flowDoc('flow-uniforms'), 'softness', 'amount', 0.7), 'grain', 'amount', 0.4)
+    const doc = setParam(
+      setParam(flowDoc('flow-uniforms'), 'softness', 'amount', 0.7),
+      'grain',
+      'amount',
+      0.4,
+    )
     const look = deriveFlowLook(doc)
 
     expect(look.uniforms.softness).toBe(0.7)

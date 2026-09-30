@@ -64,11 +64,7 @@ defineExpose({ focusHost })
     >
       <span class="print-stage__exposing-label">Exposing...</span>
     </div>
-    <p
-      v-if="renderError"
-      class="print-stage__blocker"
-      role="status"
-    >
+    <p v-if="renderError" class="print-stage__blocker" role="status">
       tolos needs WebGL in this browser.
     </p>
   </div>

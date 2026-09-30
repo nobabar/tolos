@@ -1,12 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createDocument, createOpaqueSeed } from '@/engine/document'
-import {
-  EXPORT_ASPECT_RATIO,
-  EXPORT_HEIGHT,
-  EXPORT_WIDTH,
-  exportPng,
-} from '@/engine/export'
+import { EXPORT_ASPECT_RATIO, EXPORT_HEIGHT, EXPORT_WIDTH, exportPng } from '@/engine/export'
 
 function createMockGl(): WebGL2RenderingContext {
   const loc = {} as WebGLUniformLocation
@@ -92,14 +87,16 @@ describe('exportPng', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(getContext)
 
     const pngBlob = new Blob(['png'], { type: 'image/png' })
-    const toBlob = vi
-      .spyOn(HTMLCanvasElement.prototype, 'toBlob')
-      .mockImplementation(function (this: HTMLCanvasElement, callback, type) {
-        expect(this.width).toBe(EXPORT_WIDTH)
-        expect(this.height).toBe(EXPORT_HEIGHT)
-        expect(type).toBe('image/png')
-        callback(pngBlob)
-      })
+    const toBlob = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function (
+      this: HTMLCanvasElement,
+      callback,
+      type,
+    ) {
+      expect(this.width).toBe(EXPORT_WIDTH)
+      expect(this.height).toBe(EXPORT_HEIGHT)
+      expect(type).toBe('image/png')
+      callback(pngBlob)
+    })
 
     const result = await exportPng(createDocument(createOpaqueSeed()))
 

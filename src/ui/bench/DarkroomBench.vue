@@ -7,8 +7,16 @@ import PrintStage from './PrintStage.vue'
 import { useBenchKeyboard } from './use-bench-keyboard'
 import { useGradientDocument } from './use-gradient-document'
 
-const { doc, mountHost, renderError, applyParam, applyRandomize, applySeed, applyExport, jobState } =
-  useGradientDocument()
+const {
+  doc,
+  mountHost,
+  renderError,
+  applyParam,
+  applyRandomize,
+  applySeed,
+  applyExport,
+  jobState,
+} = useGradientDocument()
 
 useBenchKeyboard({ jobState, applyRandomize, applyExport })
 
@@ -22,12 +30,7 @@ function onSkipToPrint(): void {
 <template>
   <div class="bench" :data-webgl="renderError ? 'unavailable' : 'ready'">
     <div class="bench__main">
-      <button
-        type="button"
-        class="bench__skip"
-        data-testid="bench-skip"
-        @click="onSkipToPrint"
-      >
+      <button type="button" class="bench__skip" data-testid="bench-skip" @click="onSkipToPrint">
         Skip to print
       </button>
       <BrandMark />

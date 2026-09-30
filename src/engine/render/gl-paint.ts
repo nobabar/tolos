@@ -64,7 +64,11 @@ export type GlState = {
   buffer: WebGLBuffer
 }
 
-function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null {
+function compileShader(
+  gl: WebGL2RenderingContext,
+  type: number,
+  source: string,
+): WebGLShader | null {
   const shader = gl.createShader(type)
   if (!shader) return null
   gl.shaderSource(shader, source)
@@ -112,7 +116,10 @@ function requireUniforms(
   return locs
 }
 
-function buildBlobProgram(gl: WebGL2RenderingContext, vert: WebGLShader): BlobProgramLocations | null {
+function buildBlobProgram(
+  gl: WebGL2RenderingContext,
+  vert: WebGLShader,
+): BlobProgramLocations | null {
   const frag = compileShader(gl, gl.FRAGMENT_SHADER, organicFragSource)
   if (!frag) return null
   const program = linkProgram(gl, vert, frag)
@@ -147,7 +154,10 @@ function buildBlobProgram(gl: WebGL2RenderingContext, vert: WebGLShader): BlobPr
   }
 }
 
-function buildFlowProgram(gl: WebGL2RenderingContext, vert: WebGLShader): FlowProgramLocations | null {
+function buildFlowProgram(
+  gl: WebGL2RenderingContext,
+  vert: WebGLShader,
+): FlowProgramLocations | null {
   const frag = compileShader(gl, gl.FRAGMENT_SHADER, flowFragSource)
   if (!frag) return null
   const program = linkProgram(gl, vert, frag)
@@ -196,7 +206,10 @@ function buildFlowProgram(gl: WebGL2RenderingContext, vert: WebGLShader): FlowPr
   }
 }
 
-function buildSilkProgram(gl: WebGL2RenderingContext, vert: WebGLShader): SilkProgramLocations | null {
+function buildSilkProgram(
+  gl: WebGL2RenderingContext,
+  vert: WebGLShader,
+): SilkProgramLocations | null {
   const frag = compileShader(gl, gl.FRAGMENT_SHADER, silkFragSource)
   if (!frag) return null
   const program = linkProgram(gl, vert, frag)

@@ -8,8 +8,7 @@ export type Renderer = {
 }
 
 export type CreateRendererResult =
-  | { ok: true; renderer: Renderer }
-  | { ok: false; error: 'webgl2-unavailable' }
+  { ok: true; renderer: Renderer } | { ok: false; error: 'webgl2-unavailable' }
 
 /**
  * Mount a WebGL2 renderer on `host`. UI must not call getContext.

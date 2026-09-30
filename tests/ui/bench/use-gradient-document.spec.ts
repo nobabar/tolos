@@ -5,10 +5,7 @@ import { mount } from '@vue/test-utils'
 import { createDocument } from '@/engine/document'
 import type { ExportPngResult } from '@/engine/export'
 import type { CreateRendererResult, Renderer } from '@/engine/render'
-import {
-  useGradientDocument,
-  type UseGradientDocument,
-} from '@/ui/bench/use-gradient-document'
+import { useGradientDocument, type UseGradientDocument } from '@/ui/bench/use-gradient-document'
 
 const draw = vi.fn<Renderer['draw']>()
 const resize = vi.fn<Renderer['resize']>()
