@@ -5,6 +5,7 @@ import {
   isValidSeed,
   normalizeDocument,
   randomize,
+  setLookFamily,
   setLookFamilyMode,
   setParam,
   setSeed,
@@ -87,6 +88,43 @@ describe('document commands', () => {
     expect(updated.params).toEqual(base.params)
   })
 
+  it('setLookFamily changes lookFamily and keeps seed and params', () => {
+    const base = setParam(createDocument('family-switch-seed'), 'grain', 'amount', 0.37)
+    expect(base.lookFamilyMode).toBe('random')
+    const next = setLookFamily(base, 'silk')
+    expect(next.lookFamily).toBe('silk')
+    expect(next.seed).toBe(base.seed)
+    expect(next.params).toEqual(base.params)
+    expect(next.lookFamilyMode).toBe('random')
+    expect(base.lookFamily).not.toBe('silk')
+  })
+
+  it('setLookFamily with random mode keeps mode random', () => {
+    const base = createDocument('family-random-mode')
+    expect(base.lookFamilyMode).toBe('random')
+    const next = setLookFamily(base, 'flow')
+    expect(next.lookFamily).toBe('flow')
+    expect(next.lookFamilyMode).toBe('random')
+  })
+
+  it('setLookFamily with fixed mode aligns mode to the selected family', () => {
+    const base = setLookFamilyMode(createDocument('family-fixed-mode'), 'blob')
+    const next = setLookFamily(base, 'silk')
+    expect(next.lookFamily).toBe('silk')
+    expect(next.lookFamilyMode).toBe('silk')
+    expect(next.seed).toBe(base.seed)
+    expect(next.params).toEqual(base.params)
+  })
+
+  it('setLookFamily ignores invalid family values', () => {
+    const base = setLookFamily(createDocument('invalid-family-seed'), 'flow')
+    const updated = setLookFamily(base, 'nope' as 'blob')
+    expect(updated.lookFamily).toBe('flow')
+    expect(updated.lookFamilyMode).toBe(base.lookFamilyMode)
+    expect(updated.seed).toBe(base.seed)
+    expect(updated.params).toEqual(base.params)
+  })
+
   it('randomize with random mode matches createDocument for family and params', () => {
     const bytes = new Uint8Array(16).fill(0xab)
     const getRandomValues = vi
@@ -166,6 +204,7 @@ describe('document commands', () => {
     expect(mod).not.toHaveProperty('patchDocument')
     expect(mod).not.toHaveProperty('updateDocument')
     expect(mod).toHaveProperty('setLookFamilyMode')
+    expect(mod).toHaveProperty('setLookFamily')
   })
 })
 
@@ -214,7 +253,7 @@ describe('normalizeDocument', () => {
 })
 
 describe('generate-path Math.random ban', () => {
-  it('createDocument / setSeed / setParam / setLookFamilyMode / randomize never call Math.random', () => {
+  it('createDocument / setSeed / setParam / setLookFamilyMode / setLookFamily / randomize never call Math.random', () => {
     const spy = vi.spyOn(Math, 'random')
     const getRandomValues = vi
       .spyOn(globalThis.crypto, 'getRandomValues')
@@ -227,6 +266,7 @@ describe('generate-path Math.random ban', () => {
     doc = setSeed(doc, 'ban-math-random-2')
     doc = setParam(doc, 'palette', 'energy', 0.5)
     doc = setLookFamilyMode(doc, 'flow')
+    doc = setLookFamily(doc, 'silk')
     doc = randomize(doc)
 
     expect(doc.schemaVersion).toBe(3)

@@ -17,6 +17,7 @@ export {
   isValidSeed,
   normalizeDocument,
   randomize,
+  setLookFamily,
   setLookFamilyMode,
   setParam,
   setSeed,

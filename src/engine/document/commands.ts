@@ -97,6 +97,32 @@ export function setLookFamilyMode(
   }
 }
 
+/**
+ * Switch active lookFamily without a new seed.
+ * Fixed mode aligns to the family; random mode stays random.
+ */
+export function setLookFamily(
+  doc: GradientDocument,
+  family: LookFamily,
+): GradientDocument {
+  if (!isLookFamily(family)) {
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      seed: doc.seed,
+      lookFamily: doc.lookFamily,
+      lookFamilyMode: doc.lookFamilyMode,
+      params: doc.params,
+    }
+  }
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    seed: doc.seed,
+    lookFamily: family,
+    lookFamilyMode: doc.lookFamilyMode === 'random' ? 'random' : family,
+    params: doc.params,
+  }
+}
+
 /** Non-empty after trim. Engine hashes any opaque seed string. */
 export function isValidSeed(seed: string): boolean {
   return seed.trim().length > 0

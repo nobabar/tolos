@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createDocument, setParam, type GradientDocument } from '@/engine/document'
+import {
+  createDocument,
+  setLookFamily,
+  setParam,
+  type GradientDocument,
+} from '@/engine/document'
 import {
   MAX_ANCHORS,
   MAX_FLOW_STOPS,
@@ -10,29 +15,41 @@ import {
   deriveSilkLook,
 } from '@/engine/render/derive-look'
 
-function withFamily(
-  doc: GradientDocument,
-  lookFamily: GradientDocument['lookFamily'],
-): GradientDocument {
-  return { ...doc, lookFamily }
-}
-
 function blobDoc(seed: string): GradientDocument {
-  return withFamily(createDocument(seed), 'blob')
+  return setLookFamily(createDocument(seed), 'blob')
 }
 
 function flowDoc(seed: string): GradientDocument {
-  return withFamily(createDocument(seed), 'flow')
+  return setLookFamily(createDocument(seed), 'flow')
 }
 
 function silkDoc(seed: string): GradientDocument {
-  return withFamily(createDocument(seed), 'silk')
+  return setLookFamily(createDocument(seed), 'silk')
 }
 
 describe('deriveLookFromDocument', () => {
   it('same seed and params yield identical anchors and uniforms', () => {
     const doc = blobDoc('look-seed-a')
     expect(deriveLookFromDocument(doc)).toEqual(deriveLookFromDocument(doc))
+  })
+
+  it('same seed and params under blob vs flow vs silk yield different family look data', () => {
+    const seed = 'cross-family-seed'
+    const blob = deriveLookFromDocument(blobDoc(seed))
+    const flow = deriveFlowLook(flowDoc(seed))
+    const silk = deriveSilkLook(silkDoc(seed))
+
+    expect(blob.anchors).toBeDefined()
+    expect(flow.stops).toBeDefined()
+    expect(silk.colors).toBeDefined()
+    expect(blob).not.toEqual(flow)
+    expect(flow).not.toEqual(silk)
+    expect(blob).not.toEqual(silk)
+
+    const base = createDocument(seed)
+    expect(setLookFamily(base, 'blob').params).toEqual(base.params)
+    expect(setLookFamily(base, 'flow').seed).toBe(base.seed)
+    expect(setLookFamily(base, 'silk').seed).toBe(base.seed)
   })
 
   it('same seed and blob family yield identical count, positions, and radii', () => {
