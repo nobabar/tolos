@@ -1,8 +1,10 @@
-export const SCHEMA_VERSION = 2 as const
+export const SCHEMA_VERSION = 3 as const
 
 export type LookFamily = 'blob' | 'flow' | 'silk'
 
 export const LOOK_FAMILIES: readonly LookFamily[] = ['blob', 'flow', 'silk']
+
+export type LookFamilyMode = 'random' | LookFamily
 
 export type PaletteParams = {
   energy: number
@@ -26,11 +28,20 @@ export type GradientDocument = {
   schemaVersion: typeof SCHEMA_VERSION
   seed: string
   lookFamily: LookFamily
+  lookFamilyMode: LookFamilyMode
   params: GradientParams
 }
 
 export type GradientDocumentV1 = {
   schemaVersion: 1
   seed: string
+  params: GradientParams
+}
+
+/** Schema 2: lookFamily present, no lookFamilyMode. */
+export type GradientDocumentV2 = {
+  schemaVersion: 2
+  seed: string
+  lookFamily: LookFamily
   params: GradientParams
 }

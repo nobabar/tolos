@@ -1,9 +1,11 @@
 export type {
   GradientDocument,
   GradientDocumentV1,
+  GradientDocumentV2,
   GradientParams,
   GrainParams,
   LookFamily,
+  LookFamilyMode,
   PaletteParams,
   SoftnessParams,
 } from './types'
@@ -15,6 +17,7 @@ export {
   isValidSeed,
   normalizeDocument,
   randomize,
+  setLookFamilyMode,
   setParam,
   setSeed,
   type ParamFamily,

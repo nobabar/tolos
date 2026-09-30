@@ -3,8 +3,10 @@ import {
   SCHEMA_VERSION,
   type GradientDocument,
   type GradientDocumentV1,
+  type GradientDocumentV2,
   type GrainParams,
   type LookFamily,
+  type LookFamilyMode,
   type PaletteParams,
   type SoftnessParams,
 } from './types'
@@ -21,6 +23,10 @@ function isLookFamily(value: unknown): value is LookFamily {
   return value === 'blob' || value === 'flow' || value === 'silk'
 }
 
+function isLookFamilyMode(value: unknown): value is LookFamilyMode {
+  return value === 'random' || isLookFamily(value)
+}
+
 /** Encode entropy bytes as an opaque hex seed. */
 export function createOpaqueSeed(randomSource: Crypto = globalThis.crypto): string {
   const bytes = new Uint8Array(16)
@@ -34,28 +40,59 @@ export function createDocument(seed: string): GradientDocument {
     schemaVersion: SCHEMA_VERSION,
     seed,
     lookFamily: derived.lookFamily,
+    lookFamilyMode: 'random',
     params: derived.params,
   }
 }
 
-/** New crypto seed -> derive lookFamily + params from prng(newSeed). */
+/**
+ * New crypto seed -> derive lookFamily + params from prng(newSeed).
+ * Fixed lookFamilyMode pins assigned family after the family PRNG draw.
+ */
 export function randomize(doc: GradientDocument): GradientDocument {
   const seed = createOpaqueSeed()
   const derived = deriveFromSeed(seed)
+  const lookFamily =
+    doc.lookFamilyMode === 'random' ? derived.lookFamily : doc.lookFamilyMode
   return {
-    schemaVersion: doc.schemaVersion,
+    schemaVersion: SCHEMA_VERSION,
     seed,
-    lookFamily: derived.lookFamily,
+    lookFamily,
+    lookFamilyMode: doc.lookFamilyMode,
     params: derived.params,
   }
 }
 
-/** Replace seed only. Params and lookFamily stay as-is. */
+/** Replace seed only. Params, lookFamily, and lookFamilyMode stay as-is. */
 export function setSeed(doc: GradientDocument, seed: string): GradientDocument {
   return {
-    schemaVersion: doc.schemaVersion,
+    schemaVersion: SCHEMA_VERSION,
     seed,
     lookFamily: doc.lookFamily,
+    lookFamilyMode: doc.lookFamilyMode,
+    params: doc.params,
+  }
+}
+
+/** Store discovery mode only. Seed, params, and lookFamily stay as-is. */
+export function setLookFamilyMode(
+  doc: GradientDocument,
+  mode: LookFamilyMode,
+): GradientDocument {
+  if (!isLookFamilyMode(mode)) {
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      seed: doc.seed,
+      lookFamily: doc.lookFamily,
+      lookFamilyMode: doc.lookFamilyMode,
+      params: doc.params,
+    }
+  }
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    seed: doc.seed,
+    lookFamily: doc.lookFamily,
+    lookFamilyMode: mode,
     params: doc.params,
   }
 }
@@ -72,9 +109,10 @@ export function setParam<F extends ParamFamily>(
   value: number,
 ): GradientDocument {
   return {
-    schemaVersion: doc.schemaVersion,
+    schemaVersion: SCHEMA_VERSION,
     seed: doc.seed,
     lookFamily: doc.lookFamily,
+    lookFamilyMode: doc.lookFamilyMode,
     params: {
       ...doc.params,
       [family]: {
@@ -85,20 +123,39 @@ export function setParam<F extends ParamFamily>(
   }
 }
 
-export function normalizeDocument(doc: GradientDocument | GradientDocumentV1): GradientDocument {
+export function normalizeDocument(
+  doc: GradientDocument | GradientDocumentV1 | GradientDocumentV2,
+): GradientDocument {
   if (doc.schemaVersion === 1) {
     return {
       schemaVersion: SCHEMA_VERSION,
       seed: doc.seed,
       lookFamily: 'blob',
+      lookFamilyMode: 'random',
       params: doc.params,
     }
   }
-  if (isLookFamily(doc.lookFamily)) {
+
+  const lookFamily = isLookFamily(doc.lookFamily) ? doc.lookFamily : 'blob'
+  const lookFamilyMode =
+    'lookFamilyMode' in doc && isLookFamilyMode(doc.lookFamilyMode)
+      ? doc.lookFamilyMode
+      : 'random'
+
+  if (
+    doc.schemaVersion === SCHEMA_VERSION &&
+    isLookFamily(doc.lookFamily) &&
+    'lookFamilyMode' in doc &&
+    isLookFamilyMode(doc.lookFamilyMode)
+  ) {
     return doc
   }
+
   return {
-    ...doc,
-    lookFamily: 'blob',
+    schemaVersion: SCHEMA_VERSION,
+    seed: doc.seed,
+    lookFamily,
+    lookFamilyMode,
+    params: doc.params,
   }
 }
