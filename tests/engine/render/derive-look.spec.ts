@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import {
-  createDocument,
-  setLookFamily,
-  setParam,
-  type GradientDocument,
-} from '@/engine/document'
+import { createDocument, setLookFamily, setParam, type GradientDocument } from '@/engine/document'
 import {
   MAX_ANCHORS,
   MAX_FLOW_STOPS,

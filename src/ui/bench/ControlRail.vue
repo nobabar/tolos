@@ -102,10 +102,7 @@ function onModeSelect(mode: LookFamilyMode): void {
   props.applyLookFamilyMode(mode)
 }
 
-function onLockToggle(
-  family: (typeof DIAL_BINDINGS)[number]['family'],
-  locked: boolean,
-): void {
+function onLockToggle(family: (typeof DIAL_BINDINGS)[number]['family'], locked: boolean): void {
   if (busy.value) return
   props.applyParamLock(family, locked)
 }
@@ -123,11 +120,7 @@ function onPullPrint(): void {
 
 <template>
   <aside class="control-rail" :class="{ 'is-disabled': busy }">
-    <div
-      class="control-rail__mode"
-      role="radiogroup"
-      aria-label="Look family"
-    >
+    <div class="control-rail__mode" role="radiogroup" aria-label="Look family">
       <button
         v-for="option in MODE_OPTIONS"
         :key="option.value"

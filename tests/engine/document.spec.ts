@@ -54,11 +54,7 @@ describe('GradientDocument', () => {
 
 describe('document commands', () => {
   it('setSeed replaces seed and keeps prior params, lookFamily, mode, and locks', () => {
-    const base = setParamLock(
-      setLookFamilyMode(createDocument('original'), 'silk'),
-      'grain',
-      true,
-    )
+    const base = setParamLock(setLookFamilyMode(createDocument('original'), 'silk'), 'grain', true)
     const tuned = setParam(base, 'grain', 'amount', 0.42)
     const updated = setSeed(tuned, 'restored-seed')
     expect(updated.seed).toBe('restored-seed')
@@ -415,11 +411,7 @@ describe('normalizeDocument', () => {
   })
 
   it('returns current-schema documents unchanged when fields are valid', () => {
-    const doc = setParamLock(
-      setLookFamilyMode(createDocument('v4-seed'), 'blob'),
-      'softness',
-      true,
-    )
+    const doc = setParamLock(setLookFamilyMode(createDocument('v4-seed'), 'blob'), 'softness', true)
     expect(normalizeDocument(doc)).toEqual(doc)
   })
 })

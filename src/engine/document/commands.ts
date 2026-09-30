@@ -72,8 +72,7 @@ export function createDocument(seed: string): GradientDocument {
 export function randomize(doc: GradientDocument): GradientDocument {
   const seed = createOpaqueSeed()
   const derived = deriveFromSeed(seed)
-  const lookFamily =
-    doc.lookFamilyMode === 'random' ? derived.lookFamily : doc.lookFamilyMode
+  const lookFamily = doc.lookFamilyMode === 'random' ? derived.lookFamily : doc.lookFamilyMode
   return {
     schemaVersion: SCHEMA_VERSION,
     seed,
@@ -82,9 +81,7 @@ export function randomize(doc: GradientDocument): GradientDocument {
     paramLocks: doc.paramLocks,
     params: {
       palette: {
-        energy: doc.paramLocks.palette
-          ? doc.params.palette.energy
-          : derived.params.palette.energy,
+        energy: doc.paramLocks.palette ? doc.params.palette.energy : derived.params.palette.energy,
       },
       softness: {
         amount: doc.paramLocks.softness
@@ -92,9 +89,7 @@ export function randomize(doc: GradientDocument): GradientDocument {
           : derived.params.softness.amount,
       },
       grain: {
-        amount: doc.paramLocks.grain
-          ? doc.params.grain.amount
-          : derived.params.grain.amount,
+        amount: doc.paramLocks.grain ? doc.params.grain.amount : derived.params.grain.amount,
       },
     },
   }
@@ -113,10 +108,7 @@ export function setSeed(doc: GradientDocument, seed: string): GradientDocument {
 }
 
 /** Store discovery mode only. Seed, params, lookFamily, and locks stay as-is. */
-export function setLookFamilyMode(
-  doc: GradientDocument,
-  mode: LookFamilyMode,
-): GradientDocument {
+export function setLookFamilyMode(doc: GradientDocument, mode: LookFamilyMode): GradientDocument {
   if (!isLookFamilyMode(mode)) {
     return {
       schemaVersion: SCHEMA_VERSION,
@@ -141,10 +133,7 @@ export function setLookFamilyMode(
  * Switch active lookFamily without a new seed.
  * Fixed mode aligns to the family; random mode stays random.
  */
-export function setLookFamily(
-  doc: GradientDocument,
-  family: LookFamily,
-): GradientDocument {
+export function setLookFamily(doc: GradientDocument, family: LookFamily): GradientDocument {
   if (!isLookFamily(family)) {
     return {
       schemaVersion: SCHEMA_VERSION,
@@ -212,11 +201,7 @@ export function setParam<F extends ParamFamily>(
 }
 
 export function normalizeDocument(
-  doc:
-    | GradientDocument
-    | GradientDocumentV1
-    | GradientDocumentV2
-    | GradientDocumentV3,
+  doc: GradientDocument | GradientDocumentV1 | GradientDocumentV2 | GradientDocumentV3,
 ): GradientDocument {
   if (doc.schemaVersion === 1) {
     return {
@@ -231,13 +216,9 @@ export function normalizeDocument(
 
   const lookFamily = isLookFamily(doc.lookFamily) ? doc.lookFamily : 'blob'
   const lookFamilyMode =
-    'lookFamilyMode' in doc && isLookFamilyMode(doc.lookFamilyMode)
-      ? doc.lookFamilyMode
-      : 'random'
+    'lookFamilyMode' in doc && isLookFamilyMode(doc.lookFamilyMode) ? doc.lookFamilyMode : 'random'
   const paramLocks =
-    'paramLocks' in doc && isParamLocks(doc.paramLocks)
-      ? doc.paramLocks
-      : { ...UNLOCKED }
+    'paramLocks' in doc && isParamLocks(doc.paramLocks) ? doc.paramLocks : { ...UNLOCKED }
 
   if (
     doc.schemaVersion === SCHEMA_VERSION &&
