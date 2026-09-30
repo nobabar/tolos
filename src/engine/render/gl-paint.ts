@@ -1,9 +1,10 @@
 import type { GradientDocument } from '../document'
-import { MAX_ANCHORS, deriveLookFromDocument } from './derive-look'
-import fragSource from './organic.frag.glsl?raw'
+import { MAX_ANCHORS, MAX_FLOW_STOPS, deriveFlowLook, deriveLookFromDocument } from './derive-look'
+import flowFragSource from './flow.frag.glsl?raw'
+import organicFragSource from './organic.frag.glsl?raw'
 import vertSource from './organic.vert.glsl?raw'
 
-export type ProgramLocations = {
+export type BlobProgramLocations = {
   program: WebGLProgram
   aPos: number
   uResolution: WebGLUniformLocation
@@ -16,9 +17,25 @@ export type ProgramLocations = {
   uAnchorRadius: WebGLUniformLocation
 }
 
+export type FlowProgramLocations = {
+  program: WebGLProgram
+  aPos: number
+  uResolution: WebGLUniformLocation
+  uSoftness: WebGLUniformLocation
+  uGrain: WebGLUniformLocation
+  uEnergy: WebGLUniformLocation
+  uSeed: WebGLUniformLocation
+  uSwirl: WebGLUniformLocation
+  uFieldScale: WebGLUniformLocation
+  uPhase: WebGLUniformLocation
+  uStops: WebGLUniformLocation
+  uStopCount: WebGLUniformLocation
+}
+
 export type GlState = {
   gl: WebGL2RenderingContext
-  locations: ProgramLocations
+  blob: BlobProgramLocations
+  flow: FlowProgramLocations
   vao: WebGLVertexArrayObject
   buffer: WebGLBuffer
 }
@@ -54,71 +71,138 @@ function linkProgram(
   return program
 }
 
-function buildProgram(gl: WebGL2RenderingContext): ProgramLocations | null {
-  const vert = compileShader(gl, gl.VERTEX_SHADER, vertSource)
-  const frag = compileShader(gl, gl.FRAGMENT_SHADER, fragSource)
-  if (!vert || !frag) {
-    if (vert) gl.deleteShader(vert)
-    if (frag) gl.deleteShader(frag)
-    return null
+function requireUniforms(
+  gl: WebGL2RenderingContext,
+  program: WebGLProgram,
+  names: string[],
+): WebGLUniformLocation[] | null {
+  const locs: WebGLUniformLocation[] = []
+  for (const name of names) {
+    const loc = gl.getUniformLocation(program, name)
+    if (!loc) {
+      gl.deleteProgram(program)
+      return null
+    }
+    locs.push(loc)
   }
+  return locs
+}
+
+function buildBlobProgram(gl: WebGL2RenderingContext, vert: WebGLShader): BlobProgramLocations | null {
+  const frag = compileShader(gl, gl.FRAGMENT_SHADER, organicFragSource)
+  if (!frag) return null
   const program = linkProgram(gl, vert, frag)
-  gl.deleteShader(vert)
   gl.deleteShader(frag)
   if (!program) return null
 
-  const uResolution = gl.getUniformLocation(program, 'u_resolution')
-  const uSoftness = gl.getUniformLocation(program, 'u_softness')
-  const uGrain = gl.getUniformLocation(program, 'u_grain')
-  const uEnergy = gl.getUniformLocation(program, 'u_energy')
-  const uSeed = gl.getUniformLocation(program, 'u_seed')
-  const uAnchorPos = gl.getUniformLocation(program, 'u_anchorPos')
-  const uAnchorRgb = gl.getUniformLocation(program, 'u_anchorRgb')
-  const uAnchorRadius = gl.getUniformLocation(program, 'u_anchorRadius')
-  if (
-    !uResolution ||
-    !uSoftness ||
-    !uGrain ||
-    !uEnergy ||
-    !uSeed ||
-    !uAnchorPos ||
-    !uAnchorRgb ||
-    !uAnchorRadius
-  ) {
-    gl.deleteProgram(program)
-    return null
-  }
+  const uniforms = requireUniforms(gl, program, [
+    'u_resolution',
+    'u_softness',
+    'u_grain',
+    'u_energy',
+    'u_seed',
+    'u_anchorPos',
+    'u_anchorRgb',
+    'u_anchorRadius',
+  ])
+  if (!uniforms) return null
+  const [uResolution, uSoftness, uGrain, uEnergy, uSeed, uAnchorPos, uAnchorRgb, uAnchorRadius] =
+    uniforms
 
   return {
     program,
     aPos: gl.getAttribLocation(program, 'a_pos'),
+    uResolution: uResolution!,
+    uSoftness: uSoftness!,
+    uGrain: uGrain!,
+    uEnergy: uEnergy!,
+    uSeed: uSeed!,
+    uAnchorPos: uAnchorPos!,
+    uAnchorRgb: uAnchorRgb!,
+    uAnchorRadius: uAnchorRadius!,
+  }
+}
+
+function buildFlowProgram(gl: WebGL2RenderingContext, vert: WebGLShader): FlowProgramLocations | null {
+  const frag = compileShader(gl, gl.FRAGMENT_SHADER, flowFragSource)
+  if (!frag) return null
+  const program = linkProgram(gl, vert, frag)
+  gl.deleteShader(frag)
+  if (!program) return null
+
+  const uniforms = requireUniforms(gl, program, [
+    'u_resolution',
+    'u_softness',
+    'u_grain',
+    'u_energy',
+    'u_seed',
+    'u_swirl',
+    'u_fieldScale',
+    'u_phase',
+    'u_stops',
+    'u_stopCount',
+  ])
+  if (!uniforms) return null
+  const [
     uResolution,
     uSoftness,
     uGrain,
     uEnergy,
     uSeed,
-    uAnchorPos,
-    uAnchorRgb,
-    uAnchorRadius,
+    uSwirl,
+    uFieldScale,
+    uPhase,
+    uStops,
+    uStopCount,
+  ] = uniforms
+
+  return {
+    program,
+    aPos: gl.getAttribLocation(program, 'a_pos'),
+    uResolution: uResolution!,
+    uSoftness: uSoftness!,
+    uGrain: uGrain!,
+    uEnergy: uEnergy!,
+    uSeed: uSeed!,
+    uSwirl: uSwirl!,
+    uFieldScale: uFieldScale!,
+    uPhase: uPhase!,
+    uStops: uStops!,
+    uStopCount: uStopCount!,
   }
 }
 
-/** Build shader program + fullscreen triangle for a WebGL2 context. */
+/** Build blob + flow programs and a shared fullscreen triangle. */
 export function buildGlState(gl: WebGL2RenderingContext): GlState | null {
-  const locations = buildProgram(gl)
-  if (!locations) return null
+  const vert = compileShader(gl, gl.VERTEX_SHADER, vertSource)
+  if (!vert) return null
+
+  const blob = buildBlobProgram(gl, vert)
+  const flow = buildFlowProgram(gl, vert)
+  gl.deleteShader(vert)
+  if (!blob || !flow) {
+    if (blob) gl.deleteProgram(blob.program)
+    if (flow) gl.deleteProgram(flow.program)
+    return null
+  }
+
   const vao = gl.createVertexArray()
   const buffer = gl.createBuffer()
-  if (!vao || !buffer) return null
+  if (!vao || !buffer) {
+    gl.deleteProgram(blob.program)
+    gl.deleteProgram(flow.program)
+    return null
+  }
 
+  // Both programs use layout(location = 0) for a_pos.
   gl.bindVertexArray(vao)
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
-  gl.enableVertexAttribArray(locations.aPos)
-  gl.vertexAttribPointer(locations.aPos, 2, gl.FLOAT, false, 0, 0)
+  gl.enableVertexAttribArray(0)
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
   gl.bindVertexArray(null)
 
-  return { gl, locations, vao, buffer }
+  return { gl, blob, flow, vao, buffer }
 }
 
 /** Organic anchor + warp path (blob family). Zero-radius slots stay inactive. */
@@ -128,7 +212,7 @@ function paintBlobDocument(
   width: number,
   height: number,
 ): void {
-  const { gl, locations, vao } = state
+  const { gl, blob, vao } = state
   const look = deriveLookFromDocument(doc)
   const { anchors, uniforms } = look
 
@@ -150,15 +234,53 @@ function paintBlobDocument(
   }
 
   gl.viewport(0, 0, width, height)
-  gl.useProgram(locations.program)
-  gl.uniform2f(locations.uResolution, width, height)
-  gl.uniform1f(locations.uSoftness, uniforms.softness)
-  gl.uniform1f(locations.uGrain, uniforms.grain)
-  gl.uniform1f(locations.uEnergy, uniforms.energy)
-  gl.uniform1f(locations.uSeed, uniforms.seedHash)
-  gl.uniform2fv(locations.uAnchorPos, pos)
-  gl.uniform3fv(locations.uAnchorRgb, rgb)
-  gl.uniform1fv(locations.uAnchorRadius, radii)
+  gl.useProgram(blob.program)
+  gl.uniform2f(blob.uResolution, width, height)
+  gl.uniform1f(blob.uSoftness, uniforms.softness)
+  gl.uniform1f(blob.uGrain, uniforms.grain)
+  gl.uniform1f(blob.uEnergy, uniforms.energy)
+  gl.uniform1f(blob.uSeed, uniforms.seedHash)
+  gl.uniform2fv(blob.uAnchorPos, pos)
+  gl.uniform3fv(blob.uAnchorRgb, rgb)
+  gl.uniform1fv(blob.uAnchorRadius, radii)
+
+  gl.bindVertexArray(vao)
+  gl.drawArrays(gl.TRIANGLES, 0, 3)
+  gl.bindVertexArray(null)
+}
+
+/** Curl / swirl field path (flow family). Unused stop slots repeat the last color. */
+function paintFlowDocument(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+): void {
+  const { gl, flow, vao } = state
+  const look = deriveFlowLook(doc)
+  const { stops, uniforms } = look
+
+  const stopRgb = new Float32Array(MAX_FLOW_STOPS * 3)
+  const last = stops[stops.length - 1] ?? [0, 0, 0]
+  for (let i = 0; i < MAX_FLOW_STOPS; i += 1) {
+    const rgb = stops[i] ?? last
+    stopRgb[i * 3] = rgb[0]
+    stopRgb[i * 3 + 1] = rgb[1]
+    stopRgb[i * 3 + 2] = rgb[2]
+  }
+
+  gl.viewport(0, 0, width, height)
+  gl.useProgram(flow.program)
+  gl.uniform2f(flow.uResolution, width, height)
+  gl.uniform1f(flow.uSoftness, uniforms.softness)
+  gl.uniform1f(flow.uGrain, uniforms.grain)
+  gl.uniform1f(flow.uEnergy, uniforms.energy)
+  gl.uniform1f(flow.uSeed, uniforms.seedHash)
+  gl.uniform1f(flow.uSwirl, uniforms.swirlStrength)
+  gl.uniform1f(flow.uFieldScale, uniforms.fieldScale)
+  gl.uniform2f(flow.uPhase, uniforms.phase[0], uniforms.phase[1])
+  gl.uniform3fv(flow.uStops, stopRgb)
+  gl.uniform1f(flow.uStopCount, stops.length)
 
   gl.bindVertexArray(vao)
   gl.drawArrays(gl.TRIANGLES, 0, 3)
@@ -167,7 +289,7 @@ function paintBlobDocument(
 
 /**
  * Paint a document at an explicit pixel size (shared by preview and export).
- * flow/silk temporarily reuse the blob path until family shaders land.
+ * silk temporarily reuses the blob path until its family shader lands.
  */
 export function paintDocument(
   state: GlState,
@@ -180,8 +302,9 @@ export function paintDocument(
       paintBlobDocument(state, doc, width, height)
       return
     case 'flow':
+      paintFlowDocument(state, doc, width, height)
+      return
     case 'silk':
-      // Temporary fallback: same organic paint until family shaders land.
       paintBlobDocument(state, doc, width, height)
       return
   }
@@ -191,5 +314,6 @@ export function paintDocument(
 export function disposeGlState(state: GlState): void {
   state.gl.deleteBuffer(state.buffer)
   state.gl.deleteVertexArray(state.vao)
-  state.gl.deleteProgram(state.locations.program)
+  state.gl.deleteProgram(state.blob.program)
+  state.gl.deleteProgram(state.flow.program)
 }

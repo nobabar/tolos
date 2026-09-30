@@ -7,6 +7,9 @@ export const MAX_ANCHORS = 6 as const
 /** Alias for MAX_ANCHORS (uniform buffer length). */
 export const ANCHOR_COUNT = MAX_ANCHORS
 
+/** Flow palette stops uploaded to the shader (active count is 3-5). */
+export const MAX_FLOW_STOPS = 5 as const
+
 export type ColorAnchor = {
   x: number
   y: number
@@ -24,6 +27,21 @@ export type LookUniforms = {
 export type DerivedLook = {
   anchors: ColorAnchor[]
   uniforms: LookUniforms
+}
+
+export type FlowUniforms = {
+  softness: number
+  grain: number
+  energy: number
+  seedHash: number
+  swirlStrength: number
+  fieldScale: number
+  phase: [number, number]
+}
+
+export type DerivedFlowLook = {
+  stops: [number, number, number][]
+  uniforms: FlowUniforms
 }
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
@@ -104,13 +122,61 @@ function deriveBlobLook(doc: GradientDocument): DerivedLook {
   }
 }
 
+/**
+ * Flow field + palette from stream `look:${seed}`. Draw order:
+ * 1. baseHue
+ * 2. stopCount -> integer in [3, 5]
+ * 3. swirlStrength
+ * 4. fieldScale
+ * 5. phaseX, phaseY
+ * 6. per active stop: hueJitter, satNoise, litNoise
+ */
+export function deriveFlowLook(doc: GradientDocument): DerivedFlowLook {
+  const prng = createPrng(`look:${doc.seed}`)
+  const energy = doc.params.palette.energy
+
+  const baseHue = prng.nextFloat01()
+  const stopCount = 3 + Math.floor(prng.nextFloat01() * 3)
+  const swirlStrength = 0.22 + prng.nextFloat01() * 0.55
+  const fieldScale = 1.4 + prng.nextFloat01() * 2.2
+  const phase: [number, number] = [
+    prng.nextFloat01() * Math.PI * 2,
+    prng.nextFloat01() * Math.PI * 2,
+  ]
+
+  const hueSpans = [0, 0.14, 0.38, 0.62, 0.86]
+  const stops: [number, number, number][] = []
+  for (let i = 0; i < stopCount; i += 1) {
+    const hueJitter = (prng.nextFloat01() - 0.5) * 0.08
+    const sat = 0.48 + energy * 0.42 + prng.nextFloat01() * 0.14
+    const lit = 0.28 + prng.nextFloat01() * 0.46 + energy * 0.08
+    const hue = baseHue + (hueSpans[i] ?? 0) + hueJitter
+    stops.push(hslToRgb(hue, Math.min(1, sat), Math.min(0.85, lit)))
+  }
+
+  return {
+    stops,
+    uniforms: {
+      softness: doc.params.softness.amount,
+      grain: doc.params.grain.amount,
+      energy,
+      seedHash: hashSeedToUint32(doc.seed) / 4294967296,
+      swirlStrength,
+      fieldScale,
+      phase,
+    },
+  }
+}
+
 export function deriveLookFromDocument(doc: GradientDocument): DerivedLook {
   switch (doc.lookFamily) {
     case 'blob':
       return deriveBlobLook(doc)
     case 'flow':
+      // Flow paint uses deriveFlowLook.
+      return deriveBlobLook(doc)
     case 'silk':
-      // Temporary: blob composition until family shaders land.
+      // Temporary: blob composition until silk shader lands.
       return deriveBlobLook(doc)
   }
 }

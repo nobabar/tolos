@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { createDocument, setParam, type GradientDocument } from '@/engine/document'
-import { MAX_ANCHORS, deriveLookFromDocument } from '@/engine/render/derive-look'
+import {
+  MAX_ANCHORS,
+  MAX_FLOW_STOPS,
+  deriveFlowLook,
+  deriveLookFromDocument,
+} from '@/engine/render/derive-look'
 
 function withFamily(doc: GradientDocument, lookFamily: GradientDocument['lookFamily']): GradientDocument {
   return { ...doc, lookFamily }
@@ -9,6 +14,10 @@ function withFamily(doc: GradientDocument, lookFamily: GradientDocument['lookFam
 
 function blobDoc(seed: string): GradientDocument {
   return withFamily(createDocument(seed), 'blob')
+}
+
+function flowDoc(seed: string): GradientDocument {
+  return withFamily(createDocument(seed), 'flow')
 }
 
 describe('deriveLookFromDocument', () => {
@@ -85,12 +94,57 @@ describe('deriveLookFromDocument', () => {
     expect(softLook.uniforms.softness).not.toBe(baseLook.uniforms.softness)
   })
 
-  it('flow and silk still derive a paint-able look (temporary blob fallback)', () => {
-    for (const family of ['flow', 'silk'] as const) {
-      const look = deriveLookFromDocument(withFamily(createDocument(`fallback-${family}`), family))
-      expect(look.anchors.length).toBeGreaterThanOrEqual(4)
-      expect(look.anchors.length).toBeLessThanOrEqual(6)
-      expect(look.uniforms.softness).toBeTypeOf('number')
+  it('silk still derives a paint-able look (temporary blob fallback)', () => {
+    const look = deriveLookFromDocument(withFamily(createDocument('fallback-silk'), 'silk'))
+    expect(look.anchors.length).toBeGreaterThanOrEqual(4)
+    expect(look.anchors.length).toBeLessThanOrEqual(6)
+    expect(look.uniforms.softness).toBeTypeOf('number')
+  })
+})
+
+describe('deriveFlowLook', () => {
+  it('same seed and schema yield identical flow uniforms and stops', () => {
+    const doc = flowDoc('flow-seed-a')
+    expect(deriveFlowLook(doc)).toEqual(deriveFlowLook(doc))
+  })
+
+  it('different seeds yield different flow field params', () => {
+    const a = deriveFlowLook(flowDoc('flow-seed-a'))
+    const b = deriveFlowLook(flowDoc('flow-seed-b'))
+    expect(a).not.toEqual(b)
+  })
+
+  it('stop count is always in [3, 5] and packs rgb in [0, 1]', () => {
+    const counts = new Set<number>()
+    for (let i = 0; i < 40; i += 1) {
+      const look = deriveFlowLook(flowDoc(`flow-stops-${i}`))
+      expect(look.stops.length).toBeGreaterThanOrEqual(3)
+      expect(look.stops.length).toBeLessThanOrEqual(5)
+      expect(look.stops.length).toBeLessThanOrEqual(MAX_FLOW_STOPS)
+      counts.add(look.stops.length)
+      for (const rgb of look.stops) {
+        for (const channel of rgb) {
+          expect(channel).toBeGreaterThanOrEqual(0)
+          expect(channel).toBeLessThanOrEqual(1)
+        }
+      }
     }
+    expect(counts.size).toBeGreaterThan(1)
+  })
+
+  it('packs soft/grain/energy and seeded field params without Math.random', () => {
+    const spy = vi.spyOn(Math, 'random')
+    const doc = setParam(setParam(flowDoc('flow-uniforms'), 'softness', 'amount', 0.7), 'grain', 'amount', 0.4)
+    const look = deriveFlowLook(doc)
+
+    expect(look.uniforms.softness).toBe(0.7)
+    expect(look.uniforms.grain).toBe(0.4)
+    expect(look.uniforms.energy).toBe(doc.params.palette.energy)
+    expect(look.uniforms.swirlStrength).toBeGreaterThan(0)
+    expect(look.uniforms.fieldScale).toBeGreaterThan(0)
+    expect(look.uniforms.phase).toHaveLength(2)
+    expect(look.uniforms.seedHash).toBeTypeOf('number')
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
   })
 })
