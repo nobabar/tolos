@@ -18,6 +18,9 @@ function railProps(
     jobState: 'idle' | 'exposing' | 'exporting'
     doc: ReturnType<typeof sampleDoc>
     applyParam: UseGradientDocument['applyParam']
+    applyLookFamilyMode: UseGradientDocument['applyLookFamilyMode']
+    applyLookFamily: UseGradientDocument['applyLookFamily']
+    applyParamLock: UseGradientDocument['applyParamLock']
     applyRandomize: () => void
     applySeed: UseGradientDocument['applySeed']
     applyExport: () => Promise<void>
@@ -27,6 +30,9 @@ function railProps(
     jobState: 'idle' as const,
     doc: sampleDoc(),
     applyParam: mockApplyParam(),
+    applyLookFamilyMode: vi.fn<UseGradientDocument['applyLookFamilyMode']>(),
+    applyLookFamily: vi.fn<UseGradientDocument['applyLookFamily']>(),
+    applyParamLock: vi.fn<UseGradientDocument['applyParamLock']>(),
     applyRandomize: vi.fn<() => void>(),
     applySeed: vi.fn<UseGradientDocument['applySeed']>(() => 'ok'),
     applyExport: vi.fn<() => Promise<void>>(async () => {}),
@@ -221,5 +227,116 @@ describe('ControlRail actions', () => {
 
     expect(wrapper.get('#seed-input').attributes('disabled')).toBeDefined()
     expect(wrapper.get('.seed-field__copy').attributes('disabled')).toBeDefined()
+  })
+
+  it('renders four look-family mode options with accessible names', () => {
+    const wrapper = mount(ControlRail, {
+      props: railProps(),
+    })
+
+    const group = wrapper.get('[role="radiogroup"]')
+    expect(group.attributes('aria-label')).toBe('Look family')
+    expect(wrapper.text()).toContain('Random')
+    expect(wrapper.text()).toContain('Blob')
+    expect(wrapper.text()).toContain('Flow')
+    expect(wrapper.text()).toContain('Silk')
+    expect(group.findAll('[role="radio"]')).toHaveLength(4)
+  })
+
+  it('renders dial lock controls with accessible names', () => {
+    const wrapper = mount(ControlRail, {
+      props: railProps(),
+    })
+
+    expect(wrapper.find('[aria-label="Lock Softness"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="Lock Grain"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="Lock Palette"]').exists()).toBe(true)
+  })
+
+  it('places mode control before dials in DOM order', () => {
+    const wrapper = mount(ControlRail, {
+      props: railProps(),
+    })
+
+    const mode = wrapper.get('[role="radiogroup"]').element
+    const dials = wrapper.get('.control-rail__dials').element
+    const position = mode.compareDocumentPosition(dials)
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('idle mode click invokes applyLookFamilyMode', async () => {
+    const applyLookFamilyMode = vi.fn<UseGradientDocument['applyLookFamilyMode']>()
+    const wrapper = mount(ControlRail, {
+      props: railProps({ applyLookFamilyMode }),
+    })
+
+    const radios = wrapper.findAll('[role="radio"]')
+    const flow = radios.find((btn) => btn.text() === 'Flow')
+    expect(flow).toBeDefined()
+    await flow!.trigger('click')
+    expect(applyLookFamilyMode).toHaveBeenCalledWith('flow')
+  })
+
+  it('idle lock click invokes applyParamLock', async () => {
+    const applyParamLock = vi.fn<UseGradientDocument['applyParamLock']>()
+    const wrapper = mount(ControlRail, {
+      props: railProps({ applyParamLock }),
+    })
+
+    await wrapper.get('[aria-label="Lock Softness"]').trigger('click')
+    expect(applyParamLock).toHaveBeenCalledWith('softness', true)
+  })
+
+  it('mode and lock controls are non-operative while exposing', async () => {
+    const applyLookFamilyMode = vi.fn<UseGradientDocument['applyLookFamilyMode']>()
+    const applyParamLock = vi.fn<UseGradientDocument['applyParamLock']>()
+    const wrapper = mount(ControlRail, {
+      props: railProps({
+        jobState: 'exposing',
+        applyLookFamilyMode,
+        applyParamLock,
+      }),
+    })
+
+    for (const radio of wrapper.findAll('[role="radio"]')) {
+      expect(radio.attributes('disabled')).toBeDefined()
+      await radio.trigger('click')
+    }
+    expect(applyLookFamilyMode).not.toHaveBeenCalled()
+
+    const lock = wrapper.get('[aria-label="Lock Softness"]')
+    expect(lock.attributes('disabled')).toBeDefined()
+    await lock.trigger('click')
+    expect(applyParamLock).not.toHaveBeenCalled()
+  })
+
+  it('mode and lock controls are non-operative while exporting', async () => {
+    const applyLookFamilyMode = vi.fn<UseGradientDocument['applyLookFamilyMode']>()
+    const applyParamLock = vi.fn<UseGradientDocument['applyParamLock']>()
+    const wrapper = mount(ControlRail, {
+      props: railProps({
+        jobState: 'exporting',
+        applyLookFamilyMode,
+        applyParamLock,
+      }),
+    })
+
+    await wrapper.findAll('[role="radio"]')[1]!.trigger('click')
+    await wrapper.get('[aria-label="Lock Grain"]').trigger('click')
+    expect(applyLookFamilyMode).not.toHaveBeenCalled()
+    expect(applyParamLock).not.toHaveBeenCalled()
+  })
+
+  it('reflects current lookFamilyMode on the selected segment', () => {
+    const doc = sampleDoc()
+    doc.lookFamilyMode = 'silk'
+    const wrapper = mount(ControlRail, {
+      props: railProps({ doc }),
+    })
+
+    const silk = wrapper.findAll('[role="radio"]').find((btn) => btn.text() === 'Silk')
+    expect(silk).toBeDefined()
+    expect(silk!.attributes('aria-checked')).toBe('true')
+    expect(silk!.classes()).toContain('is-selected')
   })
 })

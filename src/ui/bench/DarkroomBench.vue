@@ -12,6 +12,9 @@ const {
   mountHost,
   renderError,
   applyParam,
+  applyLookFamilyMode,
+  applyLookFamily,
+  applyParamLock,
   applyRandomize,
   applySeed,
   applyExport,
@@ -46,6 +49,9 @@ function onSkipToPrint(): void {
       :job-state="jobState"
       :doc="doc"
       :apply-param="applyParam"
+      :apply-look-family-mode="applyLookFamilyMode"
+      :apply-look-family="applyLookFamily"
+      :apply-param-lock="applyParamLock"
       :apply-randomize="applyRandomize"
       :apply-seed="applySeed"
       :apply-export="applyExport"

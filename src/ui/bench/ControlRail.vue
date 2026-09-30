@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
-import type { GradientDocument } from '@/engine/document'
+import type { GradientDocument, LookFamilyMode } from '@/engine/document'
 import ParamDial from './ParamDial.vue'
 import SeedField from './SeedField.vue'
 import type { JobState, UseGradientDocument } from './use-gradient-document'
+
+const MODE_OPTIONS = [
+  { value: 'random', label: 'Random' },
+  { value: 'blob', label: 'Blob' },
+  { value: 'flow', label: 'Flow' },
+  { value: 'silk', label: 'Silk' },
+] as const satisfies ReadonlyArray<{ value: LookFamilyMode; label: string }>
 
 const DIAL_BINDINGS = [
   { label: 'Softness', family: 'softness', key: 'amount' },
@@ -18,6 +25,9 @@ const props = defineProps<{
   jobState: JobState
   doc: GradientDocument
   applyParam: UseGradientDocument['applyParam']
+  applyLookFamilyMode: UseGradientDocument['applyLookFamilyMode']
+  applyLookFamily: UseGradientDocument['applyLookFamily']
+  applyParamLock: UseGradientDocument['applyParamLock']
   applyRandomize: () => void
   applySeed: UseGradientDocument['applySeed']
   applyExport: () => Promise<void>
@@ -58,6 +68,10 @@ function dialValue(family: (typeof DIAL_BINDINGS)[number]['family']): number {
   return draft.value[family]
 }
 
+function dialLocked(family: (typeof DIAL_BINDINGS)[number]['family']): boolean {
+  return props.doc.paramLocks[family]
+}
+
 function onDialInput(family: (typeof DIAL_BINDINGS)[number]['family'], value: number): void {
   draft.value = { ...draft.value, [family]: value }
 
@@ -82,6 +96,20 @@ function commitDial(family: (typeof DIAL_BINDINGS)[number]['family'], value: num
   else props.applyParam('palette', 'energy', value)
 }
 
+function onModeSelect(mode: LookFamilyMode): void {
+  if (busy.value) return
+  if (mode === props.doc.lookFamilyMode) return
+  props.applyLookFamilyMode(mode)
+}
+
+function onLockToggle(
+  family: (typeof DIAL_BINDINGS)[number]['family'],
+  locked: boolean,
+): void {
+  if (busy.value) return
+  props.applyParamLock(family, locked)
+}
+
 function onNewExposure(): void {
   if (busy.value) return
   props.applyRandomize()
@@ -95,14 +123,38 @@ function onPullPrint(): void {
 
 <template>
   <aside class="control-rail" :class="{ 'is-disabled': busy }">
+    <div
+      class="control-rail__mode"
+      role="radiogroup"
+      aria-label="Look family"
+    >
+      <button
+        v-for="option in MODE_OPTIONS"
+        :key="option.value"
+        type="button"
+        class="control-rail__mode-btn"
+        :class="{
+          'is-selected': doc.lookFamilyMode === option.value,
+          'is-disabled': busy,
+        }"
+        role="radio"
+        :aria-checked="doc.lookFamilyMode === option.value ? 'true' : 'false'"
+        :disabled="busy"
+        @click="onModeSelect(option.value)"
+      >
+        {{ option.label }}
+      </button>
+    </div>
     <div class="control-rail__dials">
       <ParamDial
         v-for="binding in DIAL_BINDINGS"
         :key="binding.label"
         :label="binding.label"
         :model-value="dialValue(binding.family)"
+        :locked="dialLocked(binding.family)"
         :disabled="busy"
         @update:model-value="onDialInput(binding.family, $event)"
+        @update:locked="onLockToggle(binding.family, $event)"
       />
     </div>
     <SeedField :seed="doc.seed" :disabled="busy" :apply-seed="applySeed" />
@@ -140,6 +192,45 @@ function onPullPrint(): void {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+}
+
+.control-rail__mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+}
+
+.control-rail__mode-btn {
+  min-height: 44px;
+  padding: var(--space-2) var(--space-2);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--rounded);
+  background: transparent;
+  color: var(--color-on-surface-muted);
+  font-family: var(--font-ui);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.control-rail__mode-btn.is-selected {
+  color: var(--color-on-surface);
+  border-color: var(--color-outline-strong);
+  background: var(--color-surface-raised);
+}
+
+.control-rail__mode-btn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.control-rail__mode-btn.is-disabled {
+  color: var(--color-on-surface-faint);
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .control-rail__dials {

@@ -5,10 +5,15 @@ import {
   createOpaqueSeed,
   isValidSeed,
   randomize,
+  setLookFamily,
+  setLookFamilyMode,
   setParam,
+  setParamLock,
   setSeed,
   type GradientDocument,
   type GrainParams,
+  type LookFamily,
+  type LookFamilyMode,
   type PaletteParams,
   type ParamFamily,
   type SoftnessParams,
@@ -34,6 +39,9 @@ export type UseGradientDocument = {
   renderError: ShallowRef<'webgl2-unavailable' | null>
   mountHost: (host: HTMLElement) => void
   applyParam: <F extends ParamFamily>(family: F, key: FamilyKeyMap[F], value: number) => void
+  applyLookFamilyMode: (mode: LookFamilyMode) => void
+  applyLookFamily: (family: LookFamily) => void
+  applyParamLock: (family: ParamFamily, locked: boolean) => void
   applyRandomize: () => void
   applySeed: (seed: string) => ApplySeedResult
   applyExport: () => Promise<void>
@@ -96,6 +104,30 @@ export function useGradientDocument(): UseGradientDocument {
     })
   }
 
+  /** Random sets mode only. Fixed mode also switches the active print family. */
+  function applyLookFamilyMode(mode: LookFamilyMode): void {
+    runExposure(() => {
+      if (mode === 'random') {
+        doc.value = setLookFamilyMode(doc.value, 'random')
+        return
+      }
+      doc.value = setLookFamilyMode(doc.value, mode)
+      doc.value = setLookFamily(doc.value, mode)
+    })
+  }
+
+  function applyLookFamily(family: LookFamily): void {
+    runExposure(() => {
+      doc.value = setLookFamily(doc.value, family)
+    })
+  }
+
+  function applyParamLock(family: ParamFamily, locked: boolean): void {
+    runExposure(() => {
+      doc.value = setParamLock(doc.value, family, locked)
+    })
+  }
+
   function applyRandomize(): void {
     runExposure(() => {
       doc.value = randomize(doc.value)
@@ -140,6 +172,9 @@ export function useGradientDocument(): UseGradientDocument {
     renderError,
     mountHost,
     applyParam,
+    applyLookFamilyMode,
+    applyLookFamily,
+    applyParamLock,
     applyRandomize,
     applySeed,
     applyExport,
