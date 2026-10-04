@@ -595,19 +595,48 @@ describe('useGradientDocument', () => {
       api.mountHost(host)
 
       api.applyParam('softness', 'amount', 0.2)
-      const seedBefore = api.doc.value.seed
-      const softnessBefore = api.doc.value.params.softness.amount
+      const before = structuredClone(api.doc.value)
 
       api.applyParam('softness', 'amount', 0.9)
       api.applyRandomize()
       api.applySeed('race-seed')
+      api.applyLookFamilyMode('silk')
+      api.applyLookFamily('flow')
+      api.applyParamLock('grain', true)
+      void api.applyExport()
 
-      expect(api.doc.value.seed).toBe(seedBefore)
-      expect(api.doc.value.params.softness.amount).toBe(softnessBefore)
+      expect(api.doc.value).toEqual(before)
+      expect(exportPng).not.toHaveBeenCalled()
       expect(api.jobState.value).toBe('exposing')
 
       vi.advanceTimersByTime(EXPOSE_TOTAL_MS)
       expect(api.jobState.value).toBe('idle')
+      wrapper.unmount()
+    })
+
+    it('export stays final-only and does not stage preview frames', async () => {
+      const { api, wrapper } = mountComposable()
+      const host = document.createElement('div')
+      api.mountHost(host)
+      draw.mockClear()
+
+      let resolveExport!: (value: ExportPngResult) => void
+      vi.mocked(exportPng).mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveExport = resolve
+        }),
+      )
+
+      const pending = api.applyExport()
+      expect(api.jobState.value).toBe('exporting')
+      expect(draw).not.toHaveBeenCalled()
+      expect(exportPng).toHaveBeenCalledTimes(1)
+      expect(exportPng).toHaveBeenCalledWith(api.doc.value)
+
+      resolveExport({ ok: true, blob: new Blob(['png'], { type: 'image/png' }) })
+      await pending
+      expect(api.jobState.value).toBe('idle')
+      expect(draw).not.toHaveBeenCalled()
       wrapper.unmount()
     })
 

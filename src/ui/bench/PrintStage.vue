@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import type { JobState } from './use-gradient-document'
 
@@ -10,28 +10,10 @@ const props = defineProps<{
 }>()
 
 const hostEl = ref<HTMLElement | null>(null)
-const prefersReducedMotion = ref(false)
-
-let motionQuery: MediaQueryList | null = null
-
-function syncMotionPreference(): void {
-  prefersReducedMotion.value = motionQuery?.matches ?? false
-}
 
 onMounted(() => {
   const host = hostEl.value
   if (host) props.mountHost(host)
-
-  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    syncMotionPreference()
-    motionQuery.addEventListener('change', syncMotionPreference)
-  }
-})
-
-onBeforeUnmount(() => {
-  motionQuery?.removeEventListener('change', syncMotionPreference)
-  motionQuery = null
 })
 
 const exposing = computed(() => !props.renderError && props.jobState === 'exposing')
@@ -56,9 +38,7 @@ defineExpose({ focusHost })
     />
     <div
       v-if="exposing"
-      class="print-stage__veil"
-      :class="{ 'print-stage__veil--fade': !prefersReducedMotion }"
-      :data-motion="prefersReducedMotion ? 'reduce' : 'ok'"
+      class="print-stage__status"
       role="status"
       aria-live="polite"
     >
@@ -100,38 +80,22 @@ defineExpose({ focusHost })
   height: 100%;
 }
 
-.print-stage__veil {
+.print-stage__status {
   position: absolute;
   inset: var(--space-print-inset);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding-top: var(--space-3);
   border-radius: var(--rounded-sm);
-  background: rgba(10, 9, 8, 0.35);
+  background: transparent;
   pointer-events: none;
-  opacity: 1;
-}
-
-.print-stage__veil--fade {
-  animation: print-veil-fade 180ms ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .print-stage__veil--fade {
-    animation: none;
-  }
-}
-
-@keyframes print-veil-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
 }
 
 .print-stage__exposing-label {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--rounded-sm);
+  background: rgba(10, 9, 8, 0.55);
   font-family: var(--font-ui);
   font-size: var(--type-body-size);
   font-weight: var(--type-body-strong-weight);

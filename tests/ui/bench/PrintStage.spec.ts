@@ -50,7 +50,7 @@ describe('PrintStage WebGL blocker', () => {
 })
 
 describe('PrintStage exposing chrome', () => {
-  it('shows veil and Exposing... label while exposing', () => {
+  it('announces Exposing... via aria-live polite while progressive stages run', () => {
     const wrapper = mount(PrintStage, {
       props: {
         mountHost: vi.fn<(host: HTMLElement) => void>(),
@@ -59,11 +59,12 @@ describe('PrintStage exposing chrome', () => {
       },
     })
 
-    expect(wrapper.find('.print-stage__veil').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Exposing...')
+    const status = wrapper.get('[role="status"][aria-live="polite"]')
+    expect(status.text()).toContain('Exposing...')
+    expect(wrapper.find('.print-stage__status').exists()).toBe(true)
   })
 
-  it('announces Exposing... via aria-live polite', () => {
+  it('does not use a heavy opaque veil as the primary progress signal', () => {
     const wrapper = mount(PrintStage, {
       props: {
         mountHost: vi.fn<(host: HTMLElement) => void>(),
@@ -72,11 +73,27 @@ describe('PrintStage exposing chrome', () => {
       },
     })
 
-    const live = wrapper.get('[aria-live="polite"]')
-    expect(live.text()).toContain('Exposing...')
+    // Progressive stages on the print are the progress read; no opaque veil cover.
+    expect(wrapper.find('.print-stage__veil').exists()).toBe(false)
+    expect(wrapper.find('.print-stage__status').exists()).toBe(true)
+    expect(wrapper.find('.print-stage__status--opaque').exists()).toBe(false)
   })
 
-  it('does not show exposing veil while exporting', () => {
+  it('keeps a readable label chip while stages remain visible', () => {
+    const wrapper = mount(PrintStage, {
+      props: {
+        mountHost: vi.fn<(host: HTMLElement) => void>(),
+        renderError: null,
+        jobState: 'exposing',
+      },
+    })
+
+    const label = wrapper.get('.print-stage__exposing-label')
+    expect(label.text()).toBe('Exposing...')
+    expect(label.classes()).toContain('print-stage__exposing-label')
+  })
+
+  it('does not show exposing status while exporting', () => {
     const wrapper = mount(PrintStage, {
       props: {
         mountHost: vi.fn<(host: HTMLElement) => void>(),
@@ -85,11 +102,11 @@ describe('PrintStage exposing chrome', () => {
       },
     })
 
-    expect(wrapper.find('.print-stage__veil').exists()).toBe(false)
+    expect(wrapper.find('.print-stage__status').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('Exposing...')
   })
 
-  it('hides exposing veil when idle', () => {
+  it('hides exposing status when idle', () => {
     const wrapper = mount(PrintStage, {
       props: {
         mountHost: vi.fn<(host: HTMLElement) => void>(),
@@ -98,11 +115,11 @@ describe('PrintStage exposing chrome', () => {
       },
     })
 
-    expect(wrapper.find('.print-stage__veil').exists()).toBe(false)
+    expect(wrapper.find('.print-stage__status').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('Exposing...')
   })
 
-  it('does not show exposing veil over the WebGL blocker', () => {
+  it('does not show exposing status over the WebGL blocker', () => {
     const wrapper = mount(PrintStage, {
       props: {
         mountHost: vi.fn<(host: HTMLElement) => void>(),
@@ -111,68 +128,10 @@ describe('PrintStage exposing chrome', () => {
       },
     })
 
+    expect(wrapper.find('.print-stage__status').exists()).toBe(false)
     expect(wrapper.find('.print-stage__veil').exists()).toBe(false)
     expect(wrapper.find('.print-stage__blocker').exists()).toBe(true)
-  })
-
-  it('snaps exposing veil when prefers-reduced-motion is set', async () => {
-    const matchMedia = vi.fn<(query: string) => MediaQueryList>((query) => ({
-      matches: query.includes('prefers-reduced-motion'),
-      media: query,
-      onchange: null,
-      addListener: vi.fn<() => void>(),
-      removeListener: vi.fn<() => void>(),
-      addEventListener: vi.fn<() => void>(),
-      removeEventListener: vi.fn<() => void>(),
-      dispatchEvent: vi.fn<() => boolean>(() => false),
-    }))
-    vi.stubGlobal('matchMedia', matchMedia)
-
-    const wrapper = mount(PrintStage, {
-      props: {
-        mountHost: vi.fn<(host: HTMLElement) => void>(),
-        renderError: null,
-        jobState: 'exposing',
-      },
-    })
-    await wrapper.vm.$nextTick()
-
-    const veil = wrapper.get('.print-stage__veil')
-    expect(veil.attributes('data-motion')).toBe('reduce')
-    expect(veil.classes()).not.toContain('print-stage__veil--fade')
-
-    wrapper.unmount()
-    vi.unstubAllGlobals()
-  })
-
-  it('uses fade class when motion is allowed', async () => {
-    const matchMedia = vi.fn<(query: string) => MediaQueryList>((query) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: vi.fn<() => void>(),
-      removeListener: vi.fn<() => void>(),
-      addEventListener: vi.fn<() => void>(),
-      removeEventListener: vi.fn<() => void>(),
-      dispatchEvent: vi.fn<() => boolean>(() => false),
-    }))
-    vi.stubGlobal('matchMedia', matchMedia)
-
-    const wrapper = mount(PrintStage, {
-      props: {
-        mountHost: vi.fn<(host: HTMLElement) => void>(),
-        renderError: null,
-        jobState: 'exposing',
-      },
-    })
-    await wrapper.vm.$nextTick()
-
-    const veil = wrapper.get('.print-stage__veil')
-    expect(veil.attributes('data-motion')).toBe('ok')
-    expect(veil.classes()).toContain('print-stage__veil--fade')
-
-    wrapper.unmount()
-    vi.unstubAllGlobals()
+    expect(wrapper.text()).not.toContain('Exposing...')
   })
 
   it('print host is focusable for tab order', () => {

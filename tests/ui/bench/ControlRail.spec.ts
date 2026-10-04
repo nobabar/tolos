@@ -139,11 +139,14 @@ describe('ControlRail actions', () => {
       props: railProps({ jobState: 'exposing', applyExport }),
     })
 
+    expect(wrapper.find('.control-rail').classes()).toContain('is-disabled')
     const pull = wrapper.get('button.btn-primary')
     expect(pull.attributes('disabled')).toBeUndefined()
     expect(pull.attributes('aria-disabled')).toBe('true')
     expect(pull.attributes('tabindex')).toBe('0')
     expect(pull.classes()).toContain('is-disabled')
+    expect(pull.text()).toContain('Pull print')
+    expect(pull.text()).not.toContain('Pulling print...')
     await pull.trigger('click')
     expect(applyExport).not.toHaveBeenCalled()
   })
