@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createDocument, createOpaqueSeed, setLookFamily } from '@/engine/document'
-import { deriveLookFromDocument, deriveSilkLook } from '@/engine/render/derive-look'
+import {
+  deriveFlowLook,
+  deriveLookFromDocument,
+  deriveSilkLook,
+} from '@/engine/render/derive-look'
 import {
   EXPOSE_BEAT_COUNT,
   EXPOSE_TOTAL_MS,
   blobSketchMarks,
+  flowSketchField,
   isFinalExposeStage,
   paintExposeStage,
   planExpose,
@@ -111,17 +116,53 @@ describe('expose stages', () => {
     expect(sketchSpy).not.toHaveBeenCalled()
   })
 
-  it('flow non-final stages keep placeholder paintDocument path', () => {
+  it('flow sketch field matches deriveFlowLook curl levers and stays seed-stable', () => {
+    const doc = flowDoc('flow-sketch-field')
+    const look = deriveFlowLook(doc)
+    const field = flowSketchField(doc)
+
+    expect(field).toEqual({
+      swirlStrength: look.uniforms.swirlStrength,
+      fieldScale: look.uniforms.fieldScale,
+      phase: look.uniforms.phase,
+    })
+    expect(flowSketchField(doc)).toEqual(field)
+    expect(flowSketchField(flowDoc('flow-sketch-other'))).not.toEqual(field)
+  })
+
+  it('flow non-final stages paint sketch modes, not paintDocument', () => {
+    const doc = flowDoc('flow-sketch-stages')
     const state = { gl: {} } as GlState
-    const blobSpy = vi.spyOn(GlPaint, 'paintBlobSketch').mockImplementation(() => undefined)
-    const silkSpy = vi.spyOn(GlPaint, 'paintSilkSketch').mockImplementation(() => undefined)
+    const sketchSpy = vi.spyOn(GlPaint, 'paintFlowSketch').mockImplementation(() => undefined)
     const paintSpy = vi.spyOn(GlPaint, 'paintDocument').mockImplementation(() => undefined)
 
-    paintExposeStage(state, flowDoc('flow-placeholder'), 64, 36, 0)
+    paintExposeStage(state, doc, 64, 36, 0)
+    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 1)
+    expect(paintSpy).not.toHaveBeenCalled()
+
+    sketchSpy.mockClear()
+    paintExposeStage(state, doc, 64, 36, 1)
+    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 2)
+    expect(paintSpy).not.toHaveBeenCalled()
+
+    sketchSpy.mockClear()
+    paintExposeStage(state, doc, 64, 36, 2)
+    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 3)
+    expect(paintSpy).not.toHaveBeenCalled()
+  })
+
+  it('flow final stage still dispatches paintDocument', () => {
+    const doc = flowDoc('flow-sketch-final')
+    const plan = planExpose(doc)
+    const state = { gl: {} } as GlState
+    const sketchSpy = vi.spyOn(GlPaint, 'paintFlowSketch').mockImplementation(() => undefined)
+    const paintSpy = vi.spyOn(GlPaint, 'paintDocument').mockImplementation(() => undefined)
+
+    paintExposeStage(state, doc, 64, 36, plan.beatCount - 1)
 
     expect(paintSpy).toHaveBeenCalledTimes(1)
-    expect(blobSpy).not.toHaveBeenCalled()
-    expect(silkSpy).not.toHaveBeenCalled()
+    expect(paintSpy).toHaveBeenCalledWith(state, doc, 64, 36)
+    expect(sketchSpy).not.toHaveBeenCalled()
   })
 
   it('silk sketch field matches deriveSilkLook fold levers and stays seed-stable', () => {

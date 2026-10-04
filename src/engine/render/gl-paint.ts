@@ -42,7 +42,11 @@ export type FlowProgramLocations = {
   uPhase: WebGLUniformLocation
   uStops: WebGLUniformLocation
   uStopCount: WebGLUniformLocation
+  uSketchMode: WebGLUniformLocation
 }
+
+/** Preview-only flow construction modes (1 guides, 2 denser, 3 color). */
+export type FlowSketchMode = 1 | 2 | 3
 
 export type SilkProgramLocations = {
   program: WebGLProgram
@@ -194,6 +198,7 @@ function buildFlowProgram(
     'u_phase',
     'u_stops',
     'u_stopCount',
+    'u_sketchMode',
   ])
   if (!uniforms) return null
   const [
@@ -207,6 +212,7 @@ function buildFlowProgram(
     uPhase,
     uStops,
     uStopCount,
+    uSketchMode,
   ] = uniforms
 
   return {
@@ -222,6 +228,7 @@ function buildFlowProgram(
     uPhase: uPhase!,
     uStops: uStops!,
     uStopCount: uStopCount!,
+    uSketchMode: uSketchMode!,
   }
 }
 
@@ -383,12 +390,13 @@ export function paintBlobSketch(
   paintBlobWithMode(state, doc, width, height, sketchMode)
 }
 
-/** Curl / swirl field path (flow family). Unused stop slots repeat the last color. */
-function paintFlowDocument(
+/** Upload flow uniforms and draw. sketchMode 0 is the final still path. */
+function paintFlowWithMode(
   state: GlState,
   doc: GradientDocument,
   width: number,
   height: number,
+  sketchMode: number,
 ): void {
   const { gl, flow, vao } = state
   const look = deriveFlowLook(doc)
@@ -415,10 +423,32 @@ function paintFlowDocument(
   gl.uniform2f(flow.uPhase, uniforms.phase[0], uniforms.phase[1])
   gl.uniform3fv(flow.uStops, stopRgb)
   gl.uniform1f(flow.uStopCount, stops.length)
+  gl.uniform1f(flow.uSketchMode, sketchMode)
 
   gl.bindVertexArray(vao)
   gl.drawArrays(gl.TRIANGLES, 0, 3)
   gl.bindVertexArray(null)
+}
+
+/** Curl / swirl field path (flow family). Unused stop slots repeat the last color. */
+function paintFlowDocument(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+): void {
+  paintFlowWithMode(state, doc, width, height, 0)
+}
+
+/** Preview-only flow construction sketch. Same deriveFlowLook field as the final still. */
+export function paintFlowSketch(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+  sketchMode: FlowSketchMode,
+): void {
+  paintFlowWithMode(state, doc, width, height, sketchMode)
 }
 
 /** Upload silk uniforms and draw. sketchMode 0 is the final still path. */

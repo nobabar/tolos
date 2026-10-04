@@ -14,6 +14,7 @@ uniform float u_fieldScale;
 uniform vec2 u_phase;
 uniform vec3 u_stops[5];
 uniform float u_stopCount;
+uniform float u_sketchMode;
 
 float hash21(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
@@ -106,6 +107,51 @@ void main() {
   // Mild warp-magnitude carry so stop hues follow swirl without hard bands.
   float curlCarry = length(warp) / max(swirl * 0.18, 0.001);
   t = fract(t + (structure - 0.5) * 0.14 + curlCarry * 0.05);
+
+  // Preview expose construction stages (export / final always use mode 0).
+  // Isolines of the curl potential are streamlines of the same field as the final still.
+  if (u_sketchMode > 0.5) {
+    vec2 nested = nestPotential(q);
+    float pot = fbm(nested);
+    float aaPot = max(fwidth(pot), 1e-4);
+
+    if (u_sketchMode < 1.5) {
+      // Dark field + white streamline / swirl guides
+      float isoFreq = mix(5.4, 3.6, soft);
+      float iso = pot * isoFreq;
+      float distToIso = abs(fract(iso + 0.5) - 0.5);
+      float halfW = mix(0.5, 1.05, soft) * aaPot * isoFreq;
+      float isolines = 1.0 - smoothstep(0.0, halfW, distToIso);
+      // Soft swirl accents from nested warp magnitude (not a second noise field)
+      float swirlAccent = smoothstep(0.2, 0.9, curlCarry) * mix(0.12, 0.28, energy);
+      float stroke = max(isolines, swirlAccent * structure);
+      outColor = vec4(vec3(clamp(stroke, 0.0, 1.0)), 1.0);
+      return;
+    }
+
+    if (u_sketchMode < 2.5) {
+      // Denser guides + soft field hint (still monochrome)
+      float isoFreq = mix(7.2, 4.8, soft);
+      float iso = pot * isoFreq;
+      float distToIso = abs(fract(iso + 0.5) - 0.5);
+      float halfW = mix(0.42, 0.95, soft) * aaPot * isoFreq;
+      float isolines = 1.0 - smoothstep(0.0, halfW, distToIso);
+      float fieldHint = mix(0.06, 0.22, smoothstep(0.15, 0.85, structure));
+      float swirlAccent = smoothstep(0.15, 0.85, curlCarry) * mix(0.18, 0.4, energy);
+      float stroke = max(isolines * 0.95, swirlAccent * 0.65) + fieldHint;
+      outColor = vec4(vec3(clamp(stroke, 0.0, 1.0)), 1.0);
+      return;
+    }
+
+    // Palette carry / color develop without grain (settles on final in last stage)
+    vec3 color = sampleStops(t);
+    float satBoost = 0.82 + energy * 0.18;
+    float luma = dot(color, vec3(0.299, 0.587, 0.114));
+    color = mix(vec3(luma), color, satBoost);
+    color = mix(color, smoothstep(0.0, 1.0, color), energy * 0.06);
+    outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+    return;
+  }
 
   vec3 color = sampleStops(t);
 

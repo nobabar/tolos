@@ -1,10 +1,12 @@
 import type { GradientDocument } from '../document'
-import { deriveLookFromDocument, deriveSilkLook } from './derive-look'
+import { deriveFlowLook, deriveLookFromDocument, deriveSilkLook } from './derive-look'
 import {
   paintBlobSketch,
   paintDocument,
+  paintFlowSketch,
   paintSilkSketch,
   type BlobSketchMode,
+  type FlowSketchMode,
   type GlState,
   type SilkSketchMode,
 } from './gl-paint'
@@ -32,6 +34,12 @@ export type SilkSketchField = {
   foldFreq: number
   sheenStrength: number
   iterations: number
+}
+
+export type FlowSketchField = {
+  swirlStrength: number
+  fieldScale: number
+  phase: [number, number]
 }
 
 /** Fixed short stage plan for preview choreography. */
@@ -67,6 +75,16 @@ export function silkSketchField(doc: GradientDocument): SilkSketchField {
   }
 }
 
+/** Flow curl field levers for construction sketch (same derive path as final). */
+export function flowSketchField(doc: GradientDocument): FlowSketchField {
+  const { uniforms } = deriveFlowLook(doc)
+  return {
+    swirlStrength: uniforms.swirlStrength,
+    fieldScale: uniforms.fieldScale,
+    phase: uniforms.phase,
+  }
+}
+
 function blobSketchModeForStage(stage: ExposeStageIndex): BlobSketchMode {
   if (stage <= 0) return 1
   if (stage === 1) return 2
@@ -74,6 +92,12 @@ function blobSketchModeForStage(stage: ExposeStageIndex): BlobSketchMode {
 }
 
 function silkSketchModeForStage(stage: ExposeStageIndex): SilkSketchMode {
+  if (stage <= 0) return 1
+  if (stage === 1) return 2
+  return 3
+}
+
+function flowSketchModeForStage(stage: ExposeStageIndex): FlowSketchMode {
   if (stage <= 0) return 1
   if (stage === 1) return 2
   return 3
@@ -102,6 +126,8 @@ export function paintExposeStage(
     paintSilkSketch(state, doc, width, height, silkSketchModeForStage(stage))
     return
   }
-  // Flow placeholder until its construction lands.
-  paintDocument(state, doc, width, height)
+  if (doc.lookFamily === 'flow') {
+    paintFlowSketch(state, doc, width, height, flowSketchModeForStage(stage))
+    return
+  }
 }
