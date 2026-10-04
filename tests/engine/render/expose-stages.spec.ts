@@ -26,14 +26,14 @@ describe('expose stages', () => {
     vi.restoreAllMocks()
   })
 
-  it('plans a fixed beat count in 3-5 and total duration in ~0.8-1.5s', () => {
+  it('plans a fixed beat count in 3-5 and total duration in ~2-2.5s', () => {
     const doc = createDocument(createOpaqueSeed())
     const plan = planExpose(doc)
 
     expect(EXPOSE_BEAT_COUNT).toBeGreaterThanOrEqual(3)
     expect(EXPOSE_BEAT_COUNT).toBeLessThanOrEqual(5)
-    expect(EXPOSE_TOTAL_MS).toBeGreaterThanOrEqual(800)
-    expect(EXPOSE_TOTAL_MS).toBeLessThanOrEqual(1500)
+    expect(EXPOSE_TOTAL_MS).toBeGreaterThanOrEqual(2000)
+    expect(EXPOSE_TOTAL_MS).toBeLessThanOrEqual(2800)
     expect(plan.beatCount).toBe(EXPOSE_BEAT_COUNT)
     expect(plan.totalMs).toBe(EXPOSE_TOTAL_MS)
     expect(plan.beatMs * plan.beatCount).toBe(plan.totalMs)

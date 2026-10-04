@@ -47,54 +47,64 @@ float fbm(vec2 p) {
 void main() {
   vec2 uv = v_uv;
   float aspect = u_resolution.x / max(u_resolution.y, 1.0);
-  vec2 p = vec2(uv.x * aspect, uv.y);
+  vec2 pBase = vec2(uv.x * aspect, uv.y);
 
   float warpAmt = 0.12 + u_energy * 0.2;
   vec2 warp = vec2(
-    fbm(p * 1.25 + u_seed * 17.0),
-    fbm(p * 1.25 + vec2(5.2, 1.3) + u_seed * 9.0)
+    fbm(pBase * 1.25 + u_seed * 17.0),
+    fbm(pBase * 1.25 + vec2(5.2, 1.3) + u_seed * 9.0)
   );
-  p += (warp - 0.5) * warpAmt;
-
   // Softness widens blobs; competition keeps peaks readable so hues don't mud
   float soft = clamp(u_softness, 0.0, 1.0);
 
   // Preview expose construction stages (export / final always use mode 0)
   if (u_sketchMode > 0.5) {
+    // Mild warp keeps cartographic hairlines readable (not soft SDF glow)
+    vec2 pSketch = pBase + (warp - 0.5) * warpAmt * 0.22;
     vec3 sketch = vec3(0.0);
 
     if (u_sketchMode < 1.5) {
-      // Dark field + soft white marks at live anchors
+      // Dark field + sharp station marks at live anchors
       for (int i = 0; i < 6; i++) {
         float radius = u_anchorRadius[i];
         float slotLive = step(0.001, radius);
         vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
-        float dotR = mix(0.018, 0.028, soft) * mix(0.85, 1.15, clamp(radius * 0.55, 0.0, 1.0));
-        float d = length(p - ap);
-        float mark = smoothstep(dotR, dotR * 0.25, d) * slotLive;
-        sketch = max(sketch, vec3(mark));
+        float d = length(pSketch - ap);
+        float aa = max(fwidth(d), 1e-4);
+        float coreR = mix(0.0045, 0.0065, soft);
+        float ringR = mix(0.011, 0.015, soft);
+        float core = (1.0 - smoothstep(coreR, coreR + aa * 1.25, d)) * slotLive;
+        float ring = (1.0 - smoothstep(0.0, aa * 1.1, abs(d - ringR))) * slotLive;
+        sketch = max(sketch, vec3(max(core, ring * 0.9)));
       }
     } else if (u_sketchMode < 2.5) {
-      // Soft elevation-style isolines from the same anchors
+      // Bathymetric-style fine isolines from the same anchors
       float field = 1e3;
       float dots = 0.0;
       for (int i = 0; i < 6; i++) {
         float radius = u_anchorRadius[i];
         float slotLive = step(0.001, radius);
         vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
-        float r = radius * mix(1.05, 1.55, soft);
-        float d = length(p - ap) / max(r, 0.001);
-        field = min(field, mix(1e3, d, slotLive));
-        float dotR = mix(0.014, 0.022, soft);
-        dots = max(dots, smoothstep(dotR, dotR * 0.2, length(p - ap)) * slotLive);
+        float r = radius * mix(1.0, 1.35, soft);
+        float dNorm = length(pSketch - ap) / max(r, 0.001);
+        field = min(field, mix(1e3, dNorm, slotLive));
+        float d = length(pSketch - ap);
+        float aaDot = max(fwidth(d), 1e-4);
+        float coreR = mix(0.0038, 0.0055, soft);
+        dots = max(dots, (1.0 - smoothstep(coreR, coreR + aaDot * 1.2, d)) * slotLive);
       }
-      float ringFreq = mix(4.8, 3.4, soft);
-      float wave = abs(fract(field * ringFreq + fbm(p * 2.2 + u_seed * 3.0) * 0.12) - 0.5);
-      float lineSoft = mix(0.035, 0.11, soft);
-      float rings = smoothstep(lineSoft, 0.0, wave) * smoothstep(1.85, 0.12, field);
-      sketch = vec3(max(rings * 0.9, dots));
+      float ringFreq = mix(9.0, 6.5, soft);
+      float wobble = (fbm(pSketch * 3.4 + u_seed * 2.0) - 0.5) * 0.04;
+      float iso = field * ringFreq + wobble;
+      float distToLine = abs(fract(iso + 0.5) - 0.5);
+      float aa = max(fwidth(iso), 1e-4);
+      float halfWidth = mix(0.55, 1.15, soft) * aa;
+      float envelope = smoothstep(2.1, 0.08, field);
+      float rings = (1.0 - smoothstep(0.0, halfWidth, distToLine)) * envelope;
+      sketch = vec3(max(rings, dots));
     } else {
       // Mass/color develop without grain (settles on final in last stage)
+      vec2 pMass = pBase + (warp - 0.5) * warpAmt;
       float falloff = mix(3.15, 1.55, soft);
       float edgeK = mix(2.75, 1.9, soft);
       float tailAmt = mix(0.035, 0.28, soft);
@@ -105,7 +115,7 @@ void main() {
         float slotLive = step(0.001, radius);
         vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
         float r = radius * mix(1.25, 2.85, soft);
-        float d = length(p - ap) / max(r, 0.001);
+        float d = length(pMass - ap) / max(r, 0.001);
         float core = pow(max(0.0, 1.0 - d), falloff * 1.4);
         core = pow(max(core, 0.0), edgeK);
         float tail = pow(1.0 / (1.0 + 2.2 * d * d), mix(2.6, 1.35, soft));
@@ -123,6 +133,8 @@ void main() {
     outColor = vec4(clamp(sketch, 0.0, 1.0), 1.0);
     return;
   }
+
+  vec2 p = pBase + (warp - 0.5) * warpAmt;
 
   // Softness gentles falloff but stays above the mud floor
   float falloff = mix(3.15, 1.55, soft);

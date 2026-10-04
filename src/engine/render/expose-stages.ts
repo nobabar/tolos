@@ -2,9 +2,9 @@ import type { GradientDocument } from '../document'
 import { deriveLookFromDocument } from './derive-look'
 import { paintBlobSketch, paintDocument, type BlobSketchMode, type GlState } from './gl-paint'
 
-/** Progressive expose: 4 beats over 1100ms (within 3-5 beats, ~0.8-1.5s). */
+/** Progressive expose: 4 beats over 2400ms (~2-2.5s). */
 export const EXPOSE_BEAT_COUNT = 4
-export const EXPOSE_TOTAL_MS = 1100
+export const EXPOSE_TOTAL_MS = 2400
 
 export type ExposePlan = {
   beatCount: number
