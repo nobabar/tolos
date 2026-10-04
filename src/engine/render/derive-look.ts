@@ -159,8 +159,9 @@ export function deriveFlowLook(doc: GradientDocument): DerivedFlowLook {
 
   const baseHue = prng.nextFloat01()
   const stopCount = 3 + Math.floor(prng.nextFloat01() * 3)
-  const swirlStrength = 0.22 + prng.nextFloat01() * 0.55
-  const fieldScale = 1.4 + prng.nextFloat01() * 2.2
+  // Slightly stronger swirl / field so nested warp reads on more seeds.
+  const swirlStrength = 0.28 + prng.nextFloat01() * 0.55
+  const fieldScale = 1.55 + prng.nextFloat01() * 2.35
   const phase: [number, number] = [
     prng.nextFloat01() * Math.PI * 2,
     prng.nextFloat01() * Math.PI * 2,
@@ -170,10 +171,11 @@ export function deriveFlowLook(doc: GradientDocument): DerivedFlowLook {
   const stops: [number, number, number][] = []
   for (let i = 0; i < stopCount; i += 1) {
     const hueJitter = (prng.nextFloat01() - 0.5) * 0.08
-    const sat = 0.48 + energy * 0.42 + prng.nextFloat01() * 0.14
-    const lit = 0.28 + prng.nextFloat01() * 0.46 + energy * 0.08
+    // Sky-leaning stops: lower sat, higher lit so energy does not push neon.
+    const sat = 0.32 + energy * 0.28 + prng.nextFloat01() * 0.12
+    const lit = 0.36 + prng.nextFloat01() * 0.4 + energy * 0.06
     const hue = baseHue + (hueSpans[i] ?? 0) + hueJitter
-    stops.push(hslToRgb(hue, Math.min(1, sat), Math.min(0.85, lit)))
+    stops.push(hslToRgb(hue, Math.min(0.78, sat), Math.min(0.88, lit)))
   }
 
   return {

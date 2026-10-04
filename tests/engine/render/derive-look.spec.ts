@@ -164,6 +164,16 @@ describe('deriveFlowLook', () => {
     expect(spy).not.toHaveBeenCalled()
     spy.mockRestore()
   })
+
+  it('swirl and field scale stay in tuned ranges across seeds', () => {
+    for (let i = 0; i < 50; i += 1) {
+      const look = deriveFlowLook(flowDoc(`flow-ranges-${i}`))
+      expect(look.uniforms.swirlStrength).toBeGreaterThanOrEqual(0.28)
+      expect(look.uniforms.swirlStrength).toBeLessThanOrEqual(0.83)
+      expect(look.uniforms.fieldScale).toBeGreaterThanOrEqual(1.55)
+      expect(look.uniforms.fieldScale).toBeLessThanOrEqual(3.9)
+    }
+  })
 })
 
 describe('deriveSilkLook', () => {

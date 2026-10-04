@@ -44,13 +44,23 @@ float fbm(vec2 p) {
   return v;
 }
 
+/** Pre-warp the potential domain so finite-diff curl gains nested structure. */
+vec2 nestPotential(vec2 p) {
+  vec2 offset = vec2(
+    fbm(p * 0.55 + vec2(2.3, 0.7)) - 0.5,
+    fbm(p * 0.55 + vec2(0.9, 3.1)) - 0.5
+  );
+  return p + offset * 0.38;
+}
+
 // Finite-difference curl of a scalar potential (stable swirl at rest).
 vec2 curlNoise(vec2 p) {
+  vec2 nested = nestPotential(p);
   float e = 0.02;
-  float nL = fbm(p + vec2(-e, 0.0));
-  float nR = fbm(p + vec2(e, 0.0));
-  float nD = fbm(p + vec2(0.0, -e));
-  float nU = fbm(p + vec2(0.0, e));
+  float nL = fbm(nested + vec2(-e, 0.0));
+  float nR = fbm(nested + vec2(e, 0.0));
+  float nD = fbm(nested + vec2(0.0, -e));
+  float nU = fbm(nested + vec2(0.0, e));
   return vec2(nU - nD, nL - nR) / (2.0 * e);
 }
 
@@ -71,29 +81,39 @@ void main() {
   float aspect = u_resolution.x / max(u_resolution.y, 1.0);
   vec2 p = vec2(uv.x * aspect, uv.y);
 
-  // Softness lowers field frequency; energy tightens swirl a little.
+  // Softness lowers field frequency; energy lifts outer swirl structure.
   float soft = clamp(u_softness, 0.0, 1.0);
+  float energy = clamp(u_energy, 0.0, 1.0);
   float scale = u_fieldScale * mix(1.25, 0.55, soft);
-  float swirl = u_swirl * mix(0.85, 1.25, clamp(u_energy, 0.0, 1.0));
+  float swirl = u_swirl * mix(0.8, 1.4, energy);
 
   vec2 q = p * scale + u_phase + vec2(u_seed * 11.0, u_seed * 7.0);
-  vec2 warp = curlNoise(q) * swirl * 0.08;
+  vec2 warp = curlNoise(q) * swirl * 0.1;
   // Second octave of domain warp for liquid drift without animation.
   vec2 q2 = (p + warp) * (scale * 0.7) + vec2(3.1, 1.7) + u_phase.yx;
-  warp += curlNoise(q2) * swirl * 0.045;
+  warp += curlNoise(q2) * swirl * 0.055;
+  // Third nest at lower amplitude for sky / swirl depth.
+  vec2 q3 = (p + warp) * (scale * 0.45) + vec2(5.7, 2.3) + u_phase * 0.5;
+  warp += curlNoise(q3) * swirl * 0.028;
 
   vec2 adv = p + warp;
-  float along = fract(adv.x * 0.55 + adv.y * 0.35 + fbm(adv * 1.1 + u_seed * 5.0) * 0.25);
+  float structure = fbm(adv * 1.15 + u_seed * 5.0);
+  // Stronger fbm coupling into palette t for secondary curl structure.
+  float along = fract(adv.x * 0.55 + adv.y * 0.35 + structure * 0.42);
   // Softness also blends toward a calmer radial falloff mix.
   float radial = length(adv - vec2(0.5 * aspect, 0.5));
   float t = mix(along, fract(radial * 0.9 + along * 0.4), soft * 0.35);
+  // Mild warp-magnitude carry so stop hues follow swirl without hard bands.
+  float curlCarry = length(warp) / max(swirl * 0.18, 0.001);
+  t = fract(t + (structure - 0.5) * 0.14 + curlCarry * 0.05);
 
   vec3 color = sampleStops(t);
 
-  float satBoost = 0.9 + u_energy * 0.4;
+  // Mild sat lift only; keep mix factor <= 1 so energy never overshoots into neon.
+  float satBoost = 0.82 + energy * 0.18;
   float luma = dot(color, vec3(0.299, 0.587, 0.114));
   color = mix(vec3(luma), color, satBoost);
-  color = mix(color, smoothstep(0.0, 1.0, color), u_energy * 0.12);
+  color = mix(color, smoothstep(0.0, 1.0, color), energy * 0.06);
 
   float gFine = hash21(gl_FragCoord.xy + u_seed * 1000.0);
   float gCoarse = valueNoise(gl_FragCoord.xy * 0.45 + u_seed * 40.0);
