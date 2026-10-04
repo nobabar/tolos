@@ -1,5 +1,6 @@
 import type { GradientDocument } from '../document'
-import { paintDocument, type GlState } from './gl-paint'
+import { deriveLookFromDocument } from './derive-look'
+import { paintBlobSketch, paintDocument, type BlobSketchMode, type GlState } from './gl-paint'
 
 /** Progressive expose: 4 beats over 1100ms (within 3-5 beats, ~0.8-1.5s). */
 export const EXPOSE_BEAT_COUNT = 4
@@ -13,6 +14,12 @@ export type ExposePlan = {
 
 export type ExposeStageIndex = number
 
+export type BlobSketchMark = {
+  x: number
+  y: number
+  radius: number
+}
+
 /** Fixed short stage plan for preview choreography. */
 export function planExpose(_doc: GradientDocument): ExposePlan {
   return {
@@ -24,6 +31,21 @@ export function planExpose(_doc: GradientDocument): ExposePlan {
 
 export function isFinalExposeStage(stage: ExposeStageIndex, beatCount: number): boolean {
   return stage >= beatCount - 1
+}
+
+/** Live blob anchor marks for construction sketch (same derive path as final). */
+export function blobSketchMarks(doc: GradientDocument): BlobSketchMark[] {
+  return deriveLookFromDocument(doc).anchors.map((a) => ({
+    x: a.x,
+    y: a.y,
+    radius: a.radius,
+  }))
+}
+
+function blobSketchModeForStage(stage: ExposeStageIndex): BlobSketchMode {
+  if (stage <= 0) return 1
+  if (stage === 1) return 2
+  return 3
 }
 
 /**
@@ -41,6 +63,10 @@ export function paintExposeStage(
     paintDocument(state, doc, width, height)
     return
   }
-  // Placeholder: same document-derived final path (no decorative overlay).
+  if (doc.lookFamily === 'blob') {
+    paintBlobSketch(state, doc, width, height, blobSketchModeForStage(stage))
+    return
+  }
+  // Flow/silk placeholders until their construction land.
   paintDocument(state, doc, width, height)
 }

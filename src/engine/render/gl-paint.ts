@@ -23,7 +23,11 @@ export type BlobProgramLocations = {
   uAnchorPos: WebGLUniformLocation
   uAnchorRgb: WebGLUniformLocation
   uAnchorRadius: WebGLUniformLocation
+  uSketchMode: WebGLUniformLocation
 }
+
+/** Preview-only blob construction modes (1 dots, 2 contours, 3 mass). */
+export type BlobSketchMode = 1 | 2 | 3
 
 export type FlowProgramLocations = {
   program: WebGLProgram
@@ -135,10 +139,20 @@ function buildBlobProgram(
     'u_anchorPos',
     'u_anchorRgb',
     'u_anchorRadius',
+    'u_sketchMode',
   ])
   if (!uniforms) return null
-  const [uResolution, uSoftness, uGrain, uEnergy, uSeed, uAnchorPos, uAnchorRgb, uAnchorRadius] =
-    uniforms
+  const [
+    uResolution,
+    uSoftness,
+    uGrain,
+    uEnergy,
+    uSeed,
+    uAnchorPos,
+    uAnchorRgb,
+    uAnchorRadius,
+    uSketchMode,
+  ] = uniforms
 
   return {
     program,
@@ -151,6 +165,7 @@ function buildBlobProgram(
     uAnchorPos: uAnchorPos!,
     uAnchorRgb: uAnchorRgb!,
     uAnchorRadius: uAnchorRadius!,
+    uSketchMode: uSketchMode!,
   }
 }
 
@@ -294,12 +309,13 @@ export function buildGlState(gl: WebGL2RenderingContext): GlState | null {
   return { gl, blob, flow, silk, vao, buffer }
 }
 
-/** Organic anchor + warp path (blob family). Zero-radius slots stay inactive. */
-function paintBlobDocument(
+/** Upload blob uniforms and draw. sketchMode 0 is the final still path. */
+function paintBlobWithMode(
   state: GlState,
   doc: GradientDocument,
   width: number,
   height: number,
+  sketchMode: number,
 ): void {
   const { gl, blob, vao } = state
   const look = deriveLookFromDocument(doc)
@@ -332,10 +348,32 @@ function paintBlobDocument(
   gl.uniform2fv(blob.uAnchorPos, pos)
   gl.uniform3fv(blob.uAnchorRgb, rgb)
   gl.uniform1fv(blob.uAnchorRadius, radii)
+  gl.uniform1f(blob.uSketchMode, sketchMode)
 
   gl.bindVertexArray(vao)
   gl.drawArrays(gl.TRIANGLES, 0, 3)
   gl.bindVertexArray(null)
+}
+
+/** Organic anchor + warp path (blob family). Zero-radius slots stay inactive. */
+function paintBlobDocument(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+): void {
+  paintBlobWithMode(state, doc, width, height, 0)
+}
+
+/** Preview-only blob construction sketch. Same deriveLook anchors as the final still. */
+export function paintBlobSketch(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+  sketchMode: BlobSketchMode,
+): void {
+  paintBlobWithMode(state, doc, width, height, sketchMode)
 }
 
 /** Curl / swirl field path (flow family). Unused stop slots repeat the last color. */
