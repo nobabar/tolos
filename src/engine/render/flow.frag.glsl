@@ -108,63 +108,66 @@ void main() {
   float curlCarry = length(warp) / max(swirl * 0.18, 0.001);
   t = fract(t + (structure - 0.5) * 0.14 + curlCarry * 0.05);
 
-  // Preview expose construction stages (export / final always use mode 0).
+  vec3 finalColor = sampleStops(t);
+
+  // Mild sat lift only; keep mix factor <= 1 so energy never overshoots into neon.
+  float satBoost = 0.82 + energy * 0.18;
+  float luma = dot(finalColor, vec3(0.299, 0.587, 0.114));
+  finalColor = mix(vec3(luma), finalColor, satBoost);
+  finalColor = mix(finalColor, smoothstep(0.0, 1.0, finalColor), energy * 0.06);
+
+  float gFine = hash21(gl_FragCoord.xy + u_seed * 1000.0);
+  float gCoarse = valueNoise(gl_FragCoord.xy * 0.45 + u_seed * 40.0);
+  float g = (gFine * 0.7 + gCoarse * 0.3 - 0.5) * u_grain * 0.38;
+  finalColor += g;
+  finalColor = clamp(finalColor, 0.0, 1.0);
+
+  // Preview expose: blend adjacent construction layers (export / final use mode 0).
   // Isolines of the curl potential are streamlines of the same field as the final still.
   if (u_sketchMode > 0.5) {
     vec2 nested = nestPotential(q);
     float pot = fbm(nested);
     float aaPot = max(fwidth(pot), 1e-4);
 
-    if (u_sketchMode < 1.5) {
-      // Dark field + white streamline / swirl guides
-      float isoFreq = mix(5.4, 3.6, soft);
-      float iso = pot * isoFreq;
-      float distToIso = abs(fract(iso + 0.5) - 0.5);
-      float halfW = mix(0.5, 1.05, soft) * aaPot * isoFreq;
-      float isolines = 1.0 - smoothstep(0.0, halfW, distToIso);
-      // Soft swirl accents from nested warp magnitude (not a second noise field)
-      float swirlAccent = smoothstep(0.2, 0.9, curlCarry) * mix(0.12, 0.28, energy);
-      float stroke = max(isolines, swirlAccent * structure);
-      outColor = vec4(vec3(clamp(stroke, 0.0, 1.0)), 1.0);
-      return;
+    float isoFreq1 = mix(5.4, 3.6, soft);
+    float iso1 = pot * isoFreq1;
+    float dist1 = abs(fract(iso1 + 0.5) - 0.5);
+    float halfW1 = mix(0.5, 1.05, soft) * aaPot * isoFreq1;
+    float isolines1 = 1.0 - smoothstep(0.0, halfW1, dist1);
+    float swirlAccent1 = smoothstep(0.2, 0.9, curlCarry) * mix(0.12, 0.28, energy);
+    vec3 layerGuides = vec3(clamp(max(isolines1, swirlAccent1 * structure), 0.0, 1.0));
+
+    float isoFreq2 = mix(7.2, 4.8, soft);
+    float iso2 = pot * isoFreq2;
+    float dist2 = abs(fract(iso2 + 0.5) - 0.5);
+    float halfW2 = mix(0.42, 0.95, soft) * aaPot * isoFreq2;
+    float isolines2 = 1.0 - smoothstep(0.0, halfW2, dist2);
+    float fieldHint = mix(0.06, 0.22, smoothstep(0.15, 0.85, structure));
+    float swirlAccent2 = smoothstep(0.15, 0.85, curlCarry) * mix(0.18, 0.4, energy);
+    vec3 layerDense = vec3(clamp(max(isolines2 * 0.95, swirlAccent2 * 0.65) + fieldHint, 0.0, 1.0));
+
+    vec3 layerColor = finalColor - vec3(g);
+    layerColor = clamp(layerColor, 0.0, 1.0);
+
+    float m = u_sketchMode;
+    vec3 sketch;
+    if (m < 2.0) {
+      float bt = clamp(m - 1.0, 0.0, 1.0);
+      bt = bt * bt * (3.0 - 2.0 * bt);
+      sketch = mix(layerGuides, layerDense, bt);
+    } else if (m < 3.0) {
+      float bt = clamp(m - 2.0, 0.0, 1.0);
+      bt = bt * bt * (3.0 - 2.0 * bt);
+      sketch = mix(layerDense, layerColor, bt);
+    } else {
+      float bt = clamp(m - 3.0, 0.0, 1.0);
+      bt = bt * bt * (3.0 - 2.0 * bt);
+      sketch = mix(layerColor, finalColor, bt);
     }
 
-    if (u_sketchMode < 2.5) {
-      // Denser guides + soft field hint (still monochrome)
-      float isoFreq = mix(7.2, 4.8, soft);
-      float iso = pot * isoFreq;
-      float distToIso = abs(fract(iso + 0.5) - 0.5);
-      float halfW = mix(0.42, 0.95, soft) * aaPot * isoFreq;
-      float isolines = 1.0 - smoothstep(0.0, halfW, distToIso);
-      float fieldHint = mix(0.06, 0.22, smoothstep(0.15, 0.85, structure));
-      float swirlAccent = smoothstep(0.15, 0.85, curlCarry) * mix(0.18, 0.4, energy);
-      float stroke = max(isolines * 0.95, swirlAccent * 0.65) + fieldHint;
-      outColor = vec4(vec3(clamp(stroke, 0.0, 1.0)), 1.0);
-      return;
-    }
-
-    // Palette carry / color develop without grain (settles on final in last stage)
-    vec3 color = sampleStops(t);
-    float satBoost = 0.82 + energy * 0.18;
-    float luma = dot(color, vec3(0.299, 0.587, 0.114));
-    color = mix(vec3(luma), color, satBoost);
-    color = mix(color, smoothstep(0.0, 1.0, color), energy * 0.06);
-    outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+    outColor = vec4(clamp(sketch, 0.0, 1.0), 1.0);
     return;
   }
 
-  vec3 color = sampleStops(t);
-
-  // Mild sat lift only; keep mix factor <= 1 so energy never overshoots into neon.
-  float satBoost = 0.82 + energy * 0.18;
-  float luma = dot(color, vec3(0.299, 0.587, 0.114));
-  color = mix(vec3(luma), color, satBoost);
-  color = mix(color, smoothstep(0.0, 1.0, color), energy * 0.06);
-
-  float gFine = hash21(gl_FragCoord.xy + u_seed * 1000.0);
-  float gCoarse = valueNoise(gl_FragCoord.xy * 0.45 + u_seed * 40.0);
-  float g = (gFine * 0.7 + gCoarse * 0.3 - 0.5) * u_grain * 0.38;
-  color += g;
-
-  outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+  outColor = vec4(finalColor, 1.0);
 }

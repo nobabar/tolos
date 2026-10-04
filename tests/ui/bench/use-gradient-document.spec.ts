@@ -563,7 +563,7 @@ describe('useGradientDocument', () => {
       vi.useFakeTimers()
     })
 
-    it('stays exposing across beats then returns to idle', () => {
+    it('stays exposing across continuous progress then returns to idle', async () => {
       const { api, wrapper } = mountComposable()
       const host = document.createElement('div')
       api.mountHost(host)
@@ -577,19 +577,23 @@ describe('useGradientDocument', () => {
       expect(api.jobState.value).toBe('exposing')
       expect(draw).toHaveBeenCalledWith(api.doc.value, 0)
 
-      for (let stage = 1; stage < plan.beatCount; stage += 1) {
-        vi.advanceTimersByTime(plan.beatMs)
-        expect(api.jobState.value).toBe('exposing')
-        expect(draw).toHaveBeenCalledWith(api.doc.value, stage)
-      }
+      await vi.advanceTimersByTimeAsync(plan.totalMs / 2)
+      expect(api.jobState.value).toBe('exposing')
+      const midCall = draw.mock.calls[draw.mock.calls.length - 1]
+      expect(midCall?.[0]).toBe(api.doc.value)
+      expect(typeof midCall?.[1]).toBe('number')
+      expect(midCall?.[1] as number).toBeGreaterThan(0)
+      expect(midCall?.[1] as number).toBeLessThan(plan.beatCount - 1)
 
-      expect(draw).toHaveBeenCalledTimes(plan.beatCount)
-      vi.advanceTimersByTime(plan.beatMs)
+      await vi.advanceTimersByTimeAsync(plan.totalMs / 2 + 32)
       expect(api.jobState.value).toBe('idle')
+      const lastCall = draw.mock.calls[draw.mock.calls.length - 1]
+      expect(lastCall?.[0]).toBe(api.doc.value)
+      expect(lastCall?.length).toBe(1)
       wrapper.unmount()
     })
 
-    it('ignores racing commands mid-sequence', () => {
+    it('ignores racing commands mid-sequence', async () => {
       const { api, wrapper } = mountComposable()
       const host = document.createElement('div')
       api.mountHost(host)
@@ -609,7 +613,7 @@ describe('useGradientDocument', () => {
       expect(exportPng).not.toHaveBeenCalled()
       expect(api.jobState.value).toBe('exposing')
 
-      vi.advanceTimersByTime(EXPOSE_TOTAL_MS)
+      await vi.advanceTimersByTimeAsync(EXPOSE_TOTAL_MS + 32)
       expect(api.jobState.value).toBe('idle')
       wrapper.unmount()
     })
@@ -660,7 +664,7 @@ describe('useGradientDocument', () => {
       wrapper.unmount()
     })
 
-    it('cancels in-flight stage paints on unmount', () => {
+    it('cancels in-flight stage paints on unmount', async () => {
       const { api, wrapper } = mountComposable()
       const host = document.createElement('div')
       api.mountHost(host)
@@ -671,7 +675,7 @@ describe('useGradientDocument', () => {
       wrapper.unmount()
 
       draw.mockClear()
-      vi.advanceTimersByTime(EXPOSE_TOTAL_MS)
+      await vi.advanceTimersByTimeAsync(EXPOSE_TOTAL_MS + 32)
       expect(draw).not.toHaveBeenCalled()
     })
   })

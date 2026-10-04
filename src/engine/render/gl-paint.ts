@@ -26,8 +26,8 @@ export type BlobProgramLocations = {
   uSketchMode: WebGLUniformLocation
 }
 
-/** Preview-only blob construction modes (1 dots, 2 contours, 3 mass). */
-export type BlobSketchMode = 1 | 2 | 3
+/** Preview sketch phase: 1 dots, 2 contours, 3 mass; fractional values blend neighbors. */
+export type BlobSketchMode = number
 
 export type FlowProgramLocations = {
   program: WebGLProgram
@@ -45,8 +45,8 @@ export type FlowProgramLocations = {
   uSketchMode: WebGLUniformLocation
 }
 
-/** Preview-only flow construction modes (1 guides, 2 denser, 3 color). */
-export type FlowSketchMode = 1 | 2 | 3
+/** Preview sketch phase: 1 guides, 2 denser, 3 color; fractional values blend neighbors. */
+export type FlowSketchMode = number
 
 export type SilkProgramLocations = {
   program: WebGLProgram
@@ -64,8 +64,8 @@ export type SilkProgramLocations = {
   uSketchMode: WebGLUniformLocation
 }
 
-/** Preview-only silk construction modes (1 ridges, 2 deepen, 3 color). */
-export type SilkSketchMode = 1 | 2 | 3
+/** Preview sketch phase: 1 ridges, 2 deepen, 3 color; fractional values blend neighbors. */
+export type SilkSketchMode = number
 
 export type GlState = {
   gl: WebGL2RenderingContext

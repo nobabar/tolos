@@ -6,6 +6,7 @@ export {
   isFinalExposeStage,
   paintExposeStage,
   planExpose,
+  sketchModeForStage,
 } from './expose-stages'
 export type { ExposePlan, ExposeStageIndex } from './expose-stages'
 export {

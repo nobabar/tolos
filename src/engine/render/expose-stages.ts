@@ -5,10 +5,7 @@ import {
   paintDocument,
   paintFlowSketch,
   paintSilkSketch,
-  type BlobSketchMode,
-  type FlowSketchMode,
   type GlState,
-  type SilkSketchMode,
 } from './gl-paint'
 
 /** Progressive expose: 4 beats over 2400ms (~2-2.5s). */
@@ -21,6 +18,7 @@ export type ExposePlan = {
   totalMs: number
 }
 
+/** Continuous stage clock in [0, beatCount - 1]. Integer beats still valid. */
 export type ExposeStageIndex = number
 
 export type BlobSketchMark = {
@@ -55,6 +53,14 @@ export function isFinalExposeStage(stage: ExposeStageIndex, beatCount: number): 
   return stage >= beatCount - 1
 }
 
+/**
+ * Map stage clock to sketch phase.
+ * 1 = first construction layer, 2 = second, 3 = color develop, (3..4) blends toward final.
+ */
+export function sketchModeForStage(stage: ExposeStageIndex): number {
+  return 1 + Math.max(0, stage)
+}
+
 /** Live blob anchor marks for construction sketch (same derive path as final). */
 export function blobSketchMarks(doc: GradientDocument): BlobSketchMark[] {
   return deriveLookFromDocument(doc).anchors.map((a) => ({
@@ -85,26 +91,9 @@ export function flowSketchField(doc: GradientDocument): FlowSketchField {
   }
 }
 
-function blobSketchModeForStage(stage: ExposeStageIndex): BlobSketchMode {
-  if (stage <= 0) return 1
-  if (stage === 1) return 2
-  return 3
-}
-
-function silkSketchModeForStage(stage: ExposeStageIndex): SilkSketchMode {
-  if (stage <= 0) return 1
-  if (stage === 1) return 2
-  return 3
-}
-
-function flowSketchModeForStage(stage: ExposeStageIndex): FlowSketchMode {
-  if (stage <= 0) return 1
-  if (stage === 1) return 2
-  return 3
-}
-
 /**
  * Preview stage paint. Final stage is bit-identical to direct paintDocument.
+ * Fractional stages blend adjacent construction layers in the family shader.
  */
 export function paintExposeStage(
   state: GlState,
@@ -118,16 +107,17 @@ export function paintExposeStage(
     paintDocument(state, doc, width, height)
     return
   }
+  const sketchMode = sketchModeForStage(stage)
   if (doc.lookFamily === 'blob') {
-    paintBlobSketch(state, doc, width, height, blobSketchModeForStage(stage))
+    paintBlobSketch(state, doc, width, height, sketchMode)
     return
   }
   if (doc.lookFamily === 'silk') {
-    paintSilkSketch(state, doc, width, height, silkSketchModeForStage(stage))
+    paintSilkSketch(state, doc, width, height, sketchMode)
     return
   }
   if (doc.lookFamily === 'flow') {
-    paintFlowSketch(state, doc, width, height, flowSketchModeForStage(stage))
+    paintFlowSketch(state, doc, width, height, sketchMode)
     return
   }
 }

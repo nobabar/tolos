@@ -12,7 +12,7 @@ uniform float u_seed;
 uniform vec2 u_anchorPos[6];
 uniform vec3 u_anchorRgb[6];
 uniform float u_anchorRadius[6];
-// 0 = final still, 1 = dots, 2 = contours, 3 = mass develop (preview expose)
+// 0 = final still; preview phase 1..4 blends dots -> contours -> mass -> final
 uniform float u_sketchMode;
 
 float hash21(vec2 p) {
@@ -57,83 +57,6 @@ void main() {
   // Softness widens blobs; competition keeps peaks readable so hues don't mud
   float soft = clamp(u_softness, 0.0, 1.0);
 
-  // Preview expose construction stages (export / final always use mode 0)
-  if (u_sketchMode > 0.5) {
-    // Mild warp keeps cartographic hairlines readable (not soft SDF glow)
-    vec2 pSketch = pBase + (warp - 0.5) * warpAmt * 0.22;
-    vec3 sketch = vec3(0.0);
-
-    if (u_sketchMode < 1.5) {
-      // Dark field + sharp station marks at live anchors
-      for (int i = 0; i < 6; i++) {
-        float radius = u_anchorRadius[i];
-        float slotLive = step(0.001, radius);
-        vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
-        float d = length(pSketch - ap);
-        float aa = max(fwidth(d), 1e-4);
-        float coreR = mix(0.0045, 0.0065, soft);
-        float ringR = mix(0.011, 0.015, soft);
-        float core = (1.0 - smoothstep(coreR, coreR + aa * 1.25, d)) * slotLive;
-        float ring = (1.0 - smoothstep(0.0, aa * 1.1, abs(d - ringR))) * slotLive;
-        sketch = max(sketch, vec3(max(core, ring * 0.9)));
-      }
-    } else if (u_sketchMode < 2.5) {
-      // Bathymetric-style fine isolines from the same anchors
-      float field = 1e3;
-      float dots = 0.0;
-      for (int i = 0; i < 6; i++) {
-        float radius = u_anchorRadius[i];
-        float slotLive = step(0.001, radius);
-        vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
-        float r = radius * mix(1.0, 1.35, soft);
-        float dNorm = length(pSketch - ap) / max(r, 0.001);
-        field = min(field, mix(1e3, dNorm, slotLive));
-        float d = length(pSketch - ap);
-        float aaDot = max(fwidth(d), 1e-4);
-        float coreR = mix(0.0038, 0.0055, soft);
-        dots = max(dots, (1.0 - smoothstep(coreR, coreR + aaDot * 1.2, d)) * slotLive);
-      }
-      float ringFreq = mix(9.0, 6.5, soft);
-      float wobble = (fbm(pSketch * 3.4 + u_seed * 2.0) - 0.5) * 0.04;
-      float iso = field * ringFreq + wobble;
-      float distToLine = abs(fract(iso + 0.5) - 0.5);
-      float aa = max(fwidth(iso), 1e-4);
-      float halfWidth = mix(0.55, 1.15, soft) * aa;
-      float envelope = smoothstep(2.1, 0.08, field);
-      float rings = (1.0 - smoothstep(0.0, halfWidth, distToLine)) * envelope;
-      sketch = vec3(max(rings, dots));
-    } else {
-      // Mass/color develop without grain (settles on final in last stage)
-      vec2 pMass = pBase + (warp - 0.5) * warpAmt;
-      float falloff = mix(3.15, 1.55, soft);
-      float edgeK = mix(2.75, 1.9, soft);
-      float tailAmt = mix(0.035, 0.28, soft);
-      vec3 color = vec3(0.0);
-      float weightSum = 0.0;
-      for (int i = 0; i < 6; i++) {
-        float radius = u_anchorRadius[i];
-        float slotLive = step(0.001, radius);
-        vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
-        float r = radius * mix(1.25, 2.85, soft);
-        float d = length(pMass - ap) / max(r, 0.001);
-        float core = pow(max(0.0, 1.0 - d), falloff * 1.4);
-        core = pow(max(core, 0.0), edgeK);
-        float tail = pow(1.0 / (1.0 + 2.2 * d * d), mix(2.6, 1.35, soft));
-        float w = (core + tailAmt * tail) * slotLive;
-        color += u_anchorRgb[i] * w;
-        weightSum += w;
-      }
-      color /= max(weightSum, 1e-4);
-      float satBoost = 0.88 + u_energy * 0.28;
-      float luma = dot(color, vec3(0.299, 0.587, 0.114));
-      color = mix(vec3(luma), color, satBoost);
-      sketch = color * 0.92;
-    }
-
-    outColor = vec4(clamp(sketch, 0.0, 1.0), 1.0);
-    return;
-  }
-
   vec2 p = pBase + (warp - 0.5) * warpAmt;
 
   // Softness gentles falloff but stays above the mud floor
@@ -142,7 +65,7 @@ void main() {
   float edgeK = mix(2.75, 1.9, soft);
   // Long-tail fill grows with Softness so mid/high soft rarely leaves voids
   float tailAmt = mix(0.035, 0.28, soft);
-  vec3 color = vec3(0.0);
+  vec3 finalColor = vec3(0.0);
   float weightSum = 0.0;
 
   for (int i = 0; i < 6; i++) {
@@ -157,21 +80,105 @@ void main() {
     core = pow(max(core, 0.0), edgeK);
     float tail = pow(1.0 / (1.0 + 2.2 * d * d), mix(2.6, 1.35, soft));
     float w = (core + tailAmt * tail) * slotLive;
-    color += u_anchorRgb[i] * w;
+    finalColor += u_anchorRgb[i] * w;
     weightSum += w;
   }
 
-  color /= max(weightSum, 1e-4);
+  finalColor /= max(weightSum, 1e-4);
 
   float satBoost = 0.92 + u_energy * 0.35;
-  float luma = dot(color, vec3(0.299, 0.587, 0.114));
-  color = mix(vec3(luma), color, satBoost);
-  color = mix(color, smoothstep(0.0, 1.0, color), u_energy * 0.15);
+  float luma = dot(finalColor, vec3(0.299, 0.587, 0.114));
+  finalColor = mix(vec3(luma), finalColor, satBoost);
+  finalColor = mix(finalColor, smoothstep(0.0, 1.0, finalColor), u_energy * 0.15);
 
   float gFine = hash21(gl_FragCoord.xy + u_seed * 1000.0);
   float gCoarse = valueNoise(gl_FragCoord.xy * 0.45 + u_seed * 40.0);
   float g = (gFine * 0.7 + gCoarse * 0.3 - 0.5) * u_grain * 0.38;
-  color += g;
+  finalColor += g;
+  finalColor = clamp(finalColor, 0.0, 1.0);
 
-  outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+  // Preview expose: blend adjacent construction layers (export / final use mode 0)
+  if (u_sketchMode > 0.5) {
+    vec2 pSketch = pBase + (warp - 0.5) * warpAmt * 0.22;
+
+    vec3 layerDots = vec3(0.0);
+    for (int i = 0; i < 6; i++) {
+      float radius = u_anchorRadius[i];
+      float slotLive = step(0.001, radius);
+      vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
+      float d = length(pSketch - ap);
+      float aa = max(fwidth(d), 1e-4);
+      float coreR = mix(0.0045, 0.0065, soft);
+      float ringR = mix(0.011, 0.015, soft);
+      float core = (1.0 - smoothstep(coreR, coreR + aa * 1.25, d)) * slotLive;
+      float ring = (1.0 - smoothstep(0.0, aa * 1.1, abs(d - ringR))) * slotLive;
+      layerDots = max(layerDots, vec3(max(core, ring * 0.9)));
+    }
+
+    float field = 1e3;
+    float dots = 0.0;
+    for (int i = 0; i < 6; i++) {
+      float radius = u_anchorRadius[i];
+      float slotLive = step(0.001, radius);
+      vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
+      float r = radius * mix(1.0, 1.35, soft);
+      float dNorm = length(pSketch - ap) / max(r, 0.001);
+      field = min(field, mix(1e3, dNorm, slotLive));
+      float d = length(pSketch - ap);
+      float aaDot = max(fwidth(d), 1e-4);
+      float coreR = mix(0.0038, 0.0055, soft);
+      dots = max(dots, (1.0 - smoothstep(coreR, coreR + aaDot * 1.2, d)) * slotLive);
+    }
+    float ringFreq = mix(9.0, 6.5, soft);
+    float wobble = (fbm(pSketch * 3.4 + u_seed * 2.0) - 0.5) * 0.04;
+    float iso = field * ringFreq + wobble;
+    float distToLine = abs(fract(iso + 0.5) - 0.5);
+    float aaIso = max(fwidth(iso), 1e-4);
+    float halfWidth = mix(0.55, 1.15, soft) * aaIso;
+    float envelope = smoothstep(2.1, 0.08, field);
+    float rings = (1.0 - smoothstep(0.0, halfWidth, distToLine)) * envelope;
+    vec3 layerContours = vec3(max(rings, dots));
+
+    vec3 massColor = vec3(0.0);
+    float massWeight = 0.0;
+    for (int i = 0; i < 6; i++) {
+      float radius = u_anchorRadius[i];
+      float slotLive = step(0.001, radius);
+      vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
+      float r = radius * mix(1.25, 2.85, soft);
+      float d = length(p - ap) / max(r, 0.001);
+      float core = pow(max(0.0, 1.0 - d), falloff * 1.4);
+      core = pow(max(core, 0.0), edgeK);
+      float tail = pow(1.0 / (1.0 + 2.2 * d * d), mix(2.6, 1.35, soft));
+      float w = (core + tailAmt * tail) * slotLive;
+      massColor += u_anchorRgb[i] * w;
+      massWeight += w;
+    }
+    massColor /= max(massWeight, 1e-4);
+    float massSat = 0.88 + u_energy * 0.28;
+    float massLuma = dot(massColor, vec3(0.299, 0.587, 0.114));
+    massColor = mix(vec3(massLuma), massColor, massSat);
+    vec3 layerMass = massColor * 0.92;
+
+    float m = u_sketchMode;
+    vec3 sketch;
+    if (m < 2.0) {
+      float t = clamp(m - 1.0, 0.0, 1.0);
+      t = t * t * (3.0 - 2.0 * t);
+      sketch = mix(layerDots, layerContours, t);
+    } else if (m < 3.0) {
+      float t = clamp(m - 2.0, 0.0, 1.0);
+      t = t * t * (3.0 - 2.0 * t);
+      sketch = mix(layerContours, layerMass, t);
+    } else {
+      float t = clamp(m - 3.0, 0.0, 1.0);
+      t = t * t * (3.0 - 2.0 * t);
+      sketch = mix(layerMass, finalColor, t);
+    }
+
+    outColor = vec4(clamp(sketch, 0.0, 1.0), 1.0);
+    return;
+  }
+
+  outColor = vec4(finalColor, 1.0);
 }

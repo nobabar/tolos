@@ -14,7 +14,7 @@ uniform float u_foldFreq;
 uniform float u_sheen;
 uniform float u_iterations;
 uniform vec3 u_colors[3];
-// 0 = final still, 1 = fold ridges, 2 = deepen + sheen hint, 3 = color develop (preview expose)
+// 0 = final still; preview phase 1..4 blends ridges -> deepen -> color -> final
 uniform float u_sketchMode;
 
 float hash21(vec2 p) {
@@ -128,92 +128,14 @@ void main() {
 
   float h = silkHeight(q, foldAxis, crossAxis, baseFreq, soft, energy);
 
-  // Preview expose construction stages (export / final always use mode 0)
-  if (u_sketchMode > 0.5) {
-    float e = mix(0.014, 0.022, soft);
-    float hCrossP = silkHeight(q + crossAxis * e, foldAxis, crossAxis, baseFreq, soft, energy);
-    float hCrossM = silkHeight(q - crossAxis * e, foldAxis, crossAxis, baseFreq, soft, energy);
-    float dhCross = (hCrossP - hCrossM) / (2.0 * e);
-    float aaH = max(fwidth(h), 1e-4);
-    float aaG = max(fwidth(dhCross), 1e-4);
-
-    if (u_sketchMode < 1.5) {
-      // Dark field + white fold / ridge strokes from the live silk height field
-      float isoFreq = mix(5.2, 3.6, soft);
-      float iso = h * isoFreq;
-      float distToIso = abs(fract(iso + 0.5) - 0.5);
-      float halfW = mix(0.45, 0.95, soft) * aaH * isoFreq;
-      float isolines = 1.0 - smoothstep(0.0, halfW, distToIso);
-      // Crest strokes follow fold direction (zero-crossing of cross-axis slope)
-      float crestStroke = 1.0 - smoothstep(0.0, mix(0.7, 1.4, soft) * aaG, abs(dhCross));
-      crestStroke *= smoothstep(-0.35, 0.25, h);
-      float stroke = max(isolines * 0.85, crestStroke);
-      outColor = vec4(vec3(stroke), 1.0);
-      return;
-    }
-
-    if (u_sketchMode < 2.5) {
-      // Deepen ridges + light sheen hint (still monochrome)
-      float isoFreq = mix(7.0, 4.8, soft);
-      float iso = h * isoFreq;
-      float distToIso = abs(fract(iso + 0.5) - 0.5);
-      float halfW = mix(0.4, 0.9, soft) * aaH * isoFreq;
-      float isolines = 1.0 - smoothstep(0.0, halfW, distToIso);
-      float crestStroke = 1.0 - smoothstep(0.0, mix(0.55, 1.2, soft) * aaG, abs(dhCross));
-      crestStroke *= smoothstep(-0.4, 0.35, h);
-      float shadeHint = mix(0.08, 0.28, smoothstep(-0.7, 0.75, h));
-      float sheenHint = u_sheen * mix(0.25, 0.55, energy) * pow(max(smoothstep(-0.1, 0.7, h), 0.0), 1.4);
-      float stroke = max(isolines * 0.9, crestStroke) + shadeHint + sheenHint;
-      outColor = vec4(vec3(clamp(stroke, 0.0, 1.0)), 1.0);
-      return;
-    }
-
-    // Color + sheen develop without grain (settles on final in last stage)
-    float hFoldP = silkHeight(q + foldAxis * e, foldAxis, crossAxis, baseFreq, soft, energy);
-    float hFoldM = silkHeight(q - foldAxis * e, foldAxis, crossAxis, baseFreq, soft, energy);
-    vec3 N = normalize(vec3(-(hFoldP - hFoldM) / (2.0 * e), -dhCross, 1.15));
-    vec3 L = normalize(vec3(0.32, 0.48, 0.9));
-    float ndotl = clamp(dot(N, L), 0.0, 1.0);
-    float graze = 1.0 - ndotl;
-    float shade = mix(0.38, 1.1, ndotl);
-    shade *= mix(0.74, 1.16, smoothstep(-0.75, 0.8, h));
-    shade = mix(shade, 0.74 + h * 0.18, soft * 0.42);
-    vec3 Hvec = normalize(L + vec3(0.0, 0.0, 1.0));
-    float spec = pow(max(dot(N, Hvec), 0.0), mix(58.0, 20.0, soft));
-    float crest = smoothstep(-0.05, 0.65, h);
-    float sheenAmt = u_sheen * mix(1.05, 1.5, energy) * (spec * (0.85 + crest * 0.75));
-
-    vec3 c0 = u_colors[0];
-    vec3 c1 = u_colors[1];
-    vec3 c2 = u_colors[2];
-    float tH = smoothstep(-0.85, 0.85, h);
-    float tSide = fract(dot(q, crossAxis) * 0.1 + u_seed * 0.7 + tH * 0.2);
-    float pearl = 0.5 + 0.5 * sin(dot(N.xy, vec2(3.2, 2.5)) * 2.2 + h * 2.4 + u_seed * 5.0);
-    float mixT = clamp(tH * 0.4 + tSide * 0.18 + ndotl * 0.22 + pearl * 0.2, 0.0, 1.0);
-    vec3 alongFold = mix(c0, c1, smoothstep(0.0, 1.0, mixT));
-    vec3 acrossFold = mix(c1, c2, smoothstep(0.0, 1.0, fract(mixT + 0.35)));
-    vec3 color = mix(alongFold, acrossFold, 0.45 + graze * 0.2);
-    float rim = pow(graze, mix(2.2, 1.35, soft));
-    vec3 rimColor = mix(c2, c0, clamp(tH * 0.55 + pearl * 0.45, 0.0, 1.0));
-    color = mix(color, rimColor, rim * 0.38);
-    color = mix(color, mix(c0, c2, pearl), 0.12 + graze * 0.12);
-    color *= shade;
-    color += mix(vec3(1.0), color, 0.4) * sheenAmt * 0.8;
-    float satBoost = 0.82 + energy * 0.28;
-    float luma = dot(color, vec3(0.299, 0.587, 0.114));
-    color = mix(vec3(luma), color, satBoost);
-    color = mix(color, max(color, vec3(luma * 0.85 + 0.06)), 0.2);
-    outColor = vec4(clamp(color * 0.94, 0.0, 1.0), 1.0);
-    return;
-  }
-
   // Soft lighting from height derivatives (draped volume, not stripe sheen).
   float e = mix(0.014, 0.022, soft);
   float hFoldP = silkHeight(q + foldAxis * e, foldAxis, crossAxis, baseFreq, soft, energy);
   float hFoldM = silkHeight(q - foldAxis * e, foldAxis, crossAxis, baseFreq, soft, energy);
   float hCrossP = silkHeight(q + crossAxis * e, foldAxis, crossAxis, baseFreq, soft, energy);
   float hCrossM = silkHeight(q - crossAxis * e, foldAxis, crossAxis, baseFreq, soft, energy);
-  vec3 N = normalize(vec3(-(hFoldP - hFoldM) / (2.0 * e), -(hCrossP - hCrossM) / (2.0 * e), 1.15));
+  float dhCross = (hCrossP - hCrossM) / (2.0 * e);
+  vec3 N = normalize(vec3(-(hFoldP - hFoldM) / (2.0 * e), -dhCross, 1.15));
   vec3 L = normalize(vec3(0.32, 0.48, 0.9));
   float ndotl = clamp(dot(N, L), 0.0, 1.0);
   float graze = 1.0 - ndotl;
@@ -240,29 +162,80 @@ void main() {
 
   vec3 alongFold = mix(c0, c1, smoothstep(0.0, 1.0, mixT));
   vec3 acrossFold = mix(c1, c2, smoothstep(0.0, 1.0, fract(mixT + 0.35)));
-  vec3 color = mix(alongFold, acrossFold, 0.45 + graze * 0.2);
+  vec3 finalColor = mix(alongFold, acrossFold, 0.45 + graze * 0.2);
 
   // Stronger glancing wrap (pearlescent rim between distant stops).
   float rim = pow(graze, mix(2.2, 1.35, soft));
   vec3 rimColor = mix(c2, c0, clamp(tH * 0.55 + pearl * 0.45, 0.0, 1.0));
-  color = mix(color, rimColor, rim * 0.38);
-  color = mix(color, mix(c0, c2, pearl), 0.12 + graze * 0.12);
+  finalColor = mix(finalColor, rimColor, rim * 0.38);
+  finalColor = mix(finalColor, mix(c0, c2, pearl), 0.12 + graze * 0.12);
 
-  color *= shade;
+  finalColor *= shade;
   // Pearlescent crest light (tinted, not pure white bloom).
-  color += mix(vec3(1.0), color, 0.4) * sheenAmt * 0.8;
+  finalColor += mix(vec3(1.0), finalColor, 0.4) * sheenAmt * 0.8;
 
   // Keep mid energy from going neon; InstantGradient silk stays plush.
   float satBoost = 0.82 + energy * 0.28;
-  float luma = dot(color, vec3(0.299, 0.587, 0.114));
-  color = mix(vec3(luma), color, satBoost);
+  float luma = dot(finalColor, vec3(0.299, 0.587, 0.114));
+  finalColor = mix(vec3(luma), finalColor, satBoost);
   // Lift crushed valleys a touch so pastel mass remains.
-  color = mix(color, max(color, vec3(luma * 0.85 + 0.06)), 0.2);
+  finalColor = mix(finalColor, max(finalColor, vec3(luma * 0.85 + 0.06)), 0.2);
 
   float gFine = hash21(gl_FragCoord.xy + u_seed * 1000.0);
   float gCoarse = valueNoise(gl_FragCoord.xy * 0.45 + u_seed * 40.0);
   float g = (gFine * 0.7 + gCoarse * 0.3 - 0.5) * u_grain * 0.38;
-  color += g;
+  finalColor += g;
+  finalColor = clamp(finalColor, 0.0, 1.0);
 
-  outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+  // Preview expose: blend adjacent construction layers (export / final use mode 0)
+  if (u_sketchMode > 0.5) {
+    float aaH = max(fwidth(h), 1e-4);
+    float aaG = max(fwidth(dhCross), 1e-4);
+
+    float isoFreq1 = mix(5.2, 3.6, soft);
+    float iso1 = h * isoFreq1;
+    float dist1 = abs(fract(iso1 + 0.5) - 0.5);
+    float halfW1 = mix(0.45, 0.95, soft) * aaH * isoFreq1;
+    float isolines1 = 1.0 - smoothstep(0.0, halfW1, dist1);
+    float crest1 = 1.0 - smoothstep(0.0, mix(0.7, 1.4, soft) * aaG, abs(dhCross));
+    crest1 *= smoothstep(-0.35, 0.25, h);
+    vec3 layerRidges = vec3(max(isolines1 * 0.85, crest1));
+
+    float isoFreq2 = mix(7.0, 4.8, soft);
+    float iso2 = h * isoFreq2;
+    float dist2 = abs(fract(iso2 + 0.5) - 0.5);
+    float halfW2 = mix(0.4, 0.9, soft) * aaH * isoFreq2;
+    float isolines2 = 1.0 - smoothstep(0.0, halfW2, dist2);
+    float crest2 = 1.0 - smoothstep(0.0, mix(0.55, 1.2, soft) * aaG, abs(dhCross));
+    crest2 *= smoothstep(-0.4, 0.35, h);
+    float shadeHint = mix(0.08, 0.28, smoothstep(-0.7, 0.75, h));
+    float sheenHint = u_sheen * mix(0.25, 0.55, energy) * pow(max(smoothstep(-0.1, 0.7, h), 0.0), 1.4);
+    vec3 layerDeepen = vec3(clamp(max(isolines2 * 0.9, crest2) + shadeHint + sheenHint, 0.0, 1.0));
+
+    // Color develop without grain (dimmed prelude to the final still)
+    vec3 layerColor = finalColor;
+    layerColor -= vec3(g);
+    layerColor = clamp(layerColor * 0.94, 0.0, 1.0);
+
+    float m = u_sketchMode;
+    vec3 sketch;
+    if (m < 2.0) {
+      float t = clamp(m - 1.0, 0.0, 1.0);
+      t = t * t * (3.0 - 2.0 * t);
+      sketch = mix(layerRidges, layerDeepen, t);
+    } else if (m < 3.0) {
+      float t = clamp(m - 2.0, 0.0, 1.0);
+      t = t * t * (3.0 - 2.0 * t);
+      sketch = mix(layerDeepen, layerColor, t);
+    } else {
+      float t = clamp(m - 3.0, 0.0, 1.0);
+      t = t * t * (3.0 - 2.0 * t);
+      sketch = mix(layerColor, finalColor, t);
+    }
+
+    outColor = vec4(clamp(sketch, 0.0, 1.0), 1.0);
+    return;
+  }
+
+  outColor = vec4(finalColor, 1.0);
 }

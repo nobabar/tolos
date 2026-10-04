@@ -3,7 +3,7 @@ import { paintExposeStage } from './expose-stages'
 import { buildGlState, disposeGlState, paintDocument, type GlState } from './gl-paint'
 
 export type Renderer = {
-  /** Omit stage for final-only paint. Pass a stage index for preview expose choreography. */
+  /** Omit stage for final-only paint. Pass a stage clock (may be fractional) for preview expose. */
   draw: (doc: GradientDocument, stage?: number) => void
   resize: () => void
   dispose: () => void

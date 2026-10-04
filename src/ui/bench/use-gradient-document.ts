@@ -74,13 +74,10 @@ export function useGradientDocument(): UseGradientDocument {
   let renderer: Renderer | null = null
   let resizeObserver: ResizeObserver | null = null
   let exposeGeneration = 0
-  let exposeTimerIds: number[] = []
   let exposeRafId = 0
 
   function clearExposeSchedule(): void {
     exposeGeneration += 1
-    for (const id of exposeTimerIds) window.clearTimeout(id)
-    exposeTimerIds = []
     if (exposeRafId !== 0) {
       cancelAnimationFrame(exposeRafId)
       exposeRafId = 0
@@ -112,24 +109,30 @@ export function useGradientDocument(): UseGradientDocument {
     }
 
     const plan = planExpose(doc.value)
-    if (renderer) {
-      renderer.draw(doc.value, 0)
-    }
-    for (let stage = 1; stage < plan.beatCount; stage += 1) {
-      const delay = stage * plan.beatMs
-      const timerId = window.setTimeout(() => {
-        if (generation !== exposeGeneration) return
-        if (!renderer) return
-        renderer.draw(doc.value, stage)
-      }, delay)
-      exposeTimerIds.push(timerId)
+    const maxStage = plan.beatCount - 1
+    const startMs = performance.now()
+
+    const paintAt = (now: number): boolean => {
+      const elapsed = Math.max(0, now - startMs)
+      if (elapsed >= plan.totalMs) {
+        if (renderer) renderer.draw(doc.value)
+        jobState.value = 'idle'
+        return false
+      }
+      const stage = (elapsed / plan.totalMs) * maxStage
+      if (renderer) renderer.draw(doc.value, stage)
+      return true
     }
 
-    const doneId = window.setTimeout(() => {
+    paintAt(startMs)
+
+    const tick = (now: number): void => {
       if (generation !== exposeGeneration) return
-      jobState.value = 'idle'
-    }, plan.totalMs)
-    exposeTimerIds.push(doneId)
+      exposeRafId = 0
+      if (!paintAt(now)) return
+      exposeRafId = requestAnimationFrame(tick)
+    }
+    exposeRafId = requestAnimationFrame(tick)
   }
 
   function mountHost(host: HTMLElement): void {

@@ -15,6 +15,7 @@ import {
   paintExposeStage,
   planExpose,
   silkSketchField,
+  sketchModeForStage,
 } from '@/engine/render/expose-stages'
 import * as GlPaint from '@/engine/render/gl-paint'
 import type { GlState } from '@/engine/render/gl-paint'
@@ -52,7 +53,16 @@ describe('expose stages', () => {
   it('marks only the last beat as the final stage', () => {
     expect(isFinalExposeStage(0, 4)).toBe(false)
     expect(isFinalExposeStage(2, 4)).toBe(false)
+    expect(isFinalExposeStage(2.99, 4)).toBe(false)
     expect(isFinalExposeStage(3, 4)).toBe(true)
+  })
+
+  it('maps continuous stage clock to blending sketch phases', () => {
+    expect(sketchModeForStage(0)).toBe(1)
+    expect(sketchModeForStage(0.5)).toBe(1.5)
+    expect(sketchModeForStage(1)).toBe(2)
+    expect(sketchModeForStage(2)).toBe(3)
+    expect(sketchModeForStage(2.5)).toBe(3.5)
   })
 
   it('final stage paints through paintDocument', () => {
@@ -89,6 +99,11 @@ describe('expose stages', () => {
 
     paintExposeStage(state, doc, 64, 36, 0)
     expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 1)
+    expect(paintSpy).not.toHaveBeenCalled()
+
+    sketchSpy.mockClear()
+    paintExposeStage(state, doc, 64, 36, 0.5)
+    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 1.5)
     expect(paintSpy).not.toHaveBeenCalled()
 
     sketchSpy.mockClear()
@@ -141,8 +156,8 @@ describe('expose stages', () => {
     expect(paintSpy).not.toHaveBeenCalled()
 
     sketchSpy.mockClear()
-    paintExposeStage(state, doc, 64, 36, 1)
-    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 2)
+    paintExposeStage(state, doc, 64, 36, 1.25)
+    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 2.25)
     expect(paintSpy).not.toHaveBeenCalled()
 
     sketchSpy.mockClear()
@@ -191,8 +206,8 @@ describe('expose stages', () => {
     expect(paintSpy).not.toHaveBeenCalled()
 
     sketchSpy.mockClear()
-    paintExposeStage(state, doc, 64, 36, 1)
-    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 2)
+    paintExposeStage(state, doc, 64, 36, 2.25)
+    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 3.25)
     expect(paintSpy).not.toHaveBeenCalled()
 
     sketchSpy.mockClear()
