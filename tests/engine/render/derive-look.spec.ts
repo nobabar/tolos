@@ -207,13 +207,25 @@ describe('deriveSilkLook', () => {
     expect(look.uniforms.energy).toBe(doc.params.palette.energy)
     expect(look.uniforms.foldAngle).toBeGreaterThanOrEqual(0)
     expect(look.uniforms.foldAngle).toBeLessThanOrEqual(Math.PI * 2)
-    expect(look.uniforms.foldFreq).toBeGreaterThan(0)
-    expect(look.uniforms.sheenStrength).toBeGreaterThan(0)
+    expect(look.uniforms.foldFreq).toBeGreaterThanOrEqual(4.5)
+    expect(look.uniforms.foldFreq).toBeLessThanOrEqual(10.5)
+    expect(look.uniforms.sheenStrength).toBeGreaterThanOrEqual(0.48)
+    expect(look.uniforms.sheenStrength).toBeLessThanOrEqual(0.95)
     expect(look.uniforms.iterations).toBeGreaterThanOrEqual(4)
     expect(look.uniforms.iterations).toBeLessThanOrEqual(8)
     expect(look.uniforms.seedHash).toBeTypeOf('number')
     expect(spy).not.toHaveBeenCalled()
     spy.mockRestore()
+  })
+
+  it('fold freq and sheen stay in tuned ranges across seeds', () => {
+    for (let i = 0; i < 50; i += 1) {
+      const look = deriveSilkLook(silkDoc(`silk-ranges-${i}`))
+      expect(look.uniforms.foldFreq).toBeGreaterThanOrEqual(4.5)
+      expect(look.uniforms.foldFreq).toBeLessThanOrEqual(10.5)
+      expect(look.uniforms.sheenStrength).toBeGreaterThanOrEqual(0.48)
+      expect(look.uniforms.sheenStrength).toBeLessThanOrEqual(0.95)
+    }
   })
 
   it('iteration count varies across seeds within [4, 8]', () => {

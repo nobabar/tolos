@@ -205,8 +205,9 @@ export function deriveSilkLook(doc: GradientDocument): DerivedSilkLook {
 
   const baseHue = prng.nextFloat01()
   const foldAngle = prng.nextFloat01() * Math.PI * 2
-  const foldFreq = 3.5 + prng.nextFloat01() * 6.5
-  const sheenStrength = 0.25 + prng.nextFloat01() * 0.55
+  // Multi-fold draped volume: enough cycles to cross the frame, not one ribbon.
+  const foldFreq = 4.5 + prng.nextFloat01() * 6.0
+  const sheenStrength = 0.48 + prng.nextFloat01() * 0.47
   const iterations = 4 + Math.floor(prng.nextFloat01() * (SILK_MAX_ITERATIONS - 3))
 
   const hueSpans = [0, 0.18, 0.52]
@@ -217,10 +218,11 @@ export function deriveSilkLook(doc: GradientDocument): DerivedSilkLook {
   ]
   for (let i = 0; i < SILK_COLOR_COUNT; i += 1) {
     const hueJitter = (prng.nextFloat01() - 0.5) * 0.07
-    const sat = 0.42 + energy * 0.4 + prng.nextFloat01() * 0.16
-    const lit = 0.3 + prng.nextFloat01() * 0.44 + energy * 0.1
+    // Slightly softer sat/lit so folds read plush rather than neon stripes.
+    const sat = 0.34 + energy * 0.36 + prng.nextFloat01() * 0.14
+    const lit = 0.34 + prng.nextFloat01() * 0.4 + energy * 0.08
     const hue = baseHue + (hueSpans[i] ?? 0) + hueJitter
-    colors[i] = hslToRgb(hue, Math.min(1, sat), Math.min(0.88, lit))
+    colors[i] = hslToRgb(hue, Math.min(1, sat), Math.min(0.9, lit))
   }
 
   return {
