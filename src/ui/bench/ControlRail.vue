@@ -11,6 +11,7 @@ const MODE_OPTIONS = [
   { value: 'blob', label: 'Blob' },
   { value: 'flow', label: 'Flow' },
   { value: 'silk', label: 'Silk' },
+  { value: 'bloom', label: 'Bloom' },
 ] as const satisfies ReadonlyArray<{ value: LookFamilyMode; label: string }>
 
 const DIAL_BINDINGS = [

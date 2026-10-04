@@ -482,6 +482,28 @@ describe('useGradientDocument', () => {
     wrapper.unmount()
   })
 
+  it('bloom fixed mode pins lookFamily across New exposure and setLookFamily keeps seed', async () => {
+    const { api, wrapper } = mountComposable()
+    api.applyLookFamilyMode('bloom')
+    await flushFrame()
+    expect(api.doc.value.lookFamily).toBe('bloom')
+    expect(api.doc.value.lookFamilyMode).toBe('bloom')
+    const seedBefore = api.doc.value.seed
+    api.applyRandomize()
+    await nextTick()
+    expect(api.doc.value.lookFamily).toBe('bloom')
+    expect(api.doc.value.lookFamilyMode).toBe('bloom')
+    expect(api.doc.value.seed).not.toBe(seedBefore)
+    await flushFrame()
+    const afterRandomize = api.doc.value.seed
+    api.applyLookFamily('bloom')
+    await nextTick()
+    expect(api.doc.value.seed).toBe(afterRandomize)
+    expect(api.doc.value.lookFamily).toBe('bloom')
+    await flushFrame()
+    wrapper.unmount()
+  })
+
   it('idle applyLookFamily updates lookFamily with mode alignment', async () => {
     const { api, wrapper } = mountComposable()
     api.applyLookFamilyMode('blob')

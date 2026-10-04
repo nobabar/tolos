@@ -1,8 +1,8 @@
-export const SCHEMA_VERSION = 4 as const
+export const SCHEMA_VERSION = 5 as const
 
-export type LookFamily = 'blob' | 'flow' | 'silk'
+export type LookFamily = 'blob' | 'flow' | 'silk' | 'bloom'
 
-export const LOOK_FAMILIES: readonly LookFamily[] = ['blob', 'flow', 'silk']
+export const LOOK_FAMILIES: readonly LookFamily[] = ['blob', 'flow', 'silk', 'bloom']
 
 export type LookFamilyMode = 'random' | LookFamily
 
@@ -59,5 +59,15 @@ export type GradientDocumentV3 = {
   seed: string
   lookFamily: LookFamily
   lookFamilyMode: LookFamilyMode
+  params: GradientParams
+}
+
+/** Schema 4: paramLocks present; random family domain was 3 (pre-bloom). */
+export type GradientDocumentV4 = {
+  schemaVersion: 4
+  seed: string
+  lookFamily: LookFamily
+  lookFamilyMode: LookFamilyMode
+  paramLocks: ParamLocks
   params: GradientParams
 }

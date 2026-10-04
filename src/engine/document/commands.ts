@@ -1,10 +1,12 @@
 import { deriveFromSeed } from './derive-params'
 import {
+  LOOK_FAMILIES,
   SCHEMA_VERSION,
   type GradientDocument,
   type GradientDocumentV1,
   type GradientDocumentV2,
   type GradientDocumentV3,
+  type GradientDocumentV4,
   type GrainParams,
   type LookFamily,
   type LookFamilyMode,
@@ -28,7 +30,7 @@ const UNLOCKED: ParamLocks = {
 }
 
 function isLookFamily(value: unknown): value is LookFamily {
-  return value === 'blob' || value === 'flow' || value === 'silk'
+  return typeof value === 'string' && (LOOK_FAMILIES as readonly string[]).includes(value)
 }
 
 function isLookFamilyMode(value: unknown): value is LookFamilyMode {
@@ -201,7 +203,12 @@ export function setParam<F extends ParamFamily>(
 }
 
 export function normalizeDocument(
-  doc: GradientDocument | GradientDocumentV1 | GradientDocumentV2 | GradientDocumentV3,
+  doc:
+    | GradientDocument
+    | GradientDocumentV1
+    | GradientDocumentV2
+    | GradientDocumentV3
+    | GradientDocumentV4,
 ): GradientDocument {
   if (doc.schemaVersion === 1) {
     return {

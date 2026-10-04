@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  LOOK_FAMILIES,
+  SCHEMA_VERSION,
   createDocument,
+  deriveFromSeed,
   isValidSeed,
   normalizeDocument,
   randomize,
@@ -14,6 +17,7 @@ import {
   type GradientDocumentV1,
   type GradientDocumentV2,
   type GradientDocumentV3,
+  type GradientDocumentV4,
 } from '@/engine/document'
 
 function stubCryptoBytes(fill: number): ReturnType<typeof vi.spyOn> {
@@ -29,11 +33,13 @@ function stubCryptoBytes(fill: number): ReturnType<typeof vi.spyOn> {
 }
 
 describe('GradientDocument', () => {
-  it('creates a schemaVersion 4 document with unlocked dials and param families', () => {
+  it('creates a schemaVersion 5 document with unlocked dials and param families', () => {
     const doc = createDocument('fixed-seed-for-create')
-    expect(doc.schemaVersion).toBe(4)
+    expect(doc.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(SCHEMA_VERSION).toBe(5)
     expect(doc.seed).toBe('fixed-seed-for-create')
-    expect(['blob', 'flow', 'silk']).toContain(doc.lookFamily)
+    expect(LOOK_FAMILIES).toEqual(['blob', 'flow', 'silk', 'bloom'])
+    expect(LOOK_FAMILIES).toContain(doc.lookFamily)
     expect(doc.lookFamilyMode).toBe('random')
     expect(doc.paramLocks).toEqual({ palette: false, softness: false, grain: false })
     expect(doc.params.palette).toBeDefined()
@@ -49,6 +55,21 @@ describe('GradientDocument', () => {
     const b = createDocument('same-seed-params')
     expect(a.lookFamily).toBe(b.lookFamily)
     expect(a.params).toEqual(b.params)
+  })
+
+  it('same seed can yield bloom and stays identical across derive calls', () => {
+    let bloomSeed: string | null = null
+    for (let i = 0; i < 200; i += 1) {
+      const seed = `bloom-draw-${i}`
+      if (deriveFromSeed(seed).lookFamily === 'bloom') {
+        bloomSeed = seed
+        break
+      }
+    }
+    expect(bloomSeed).not.toBeNull()
+    expect(deriveFromSeed(bloomSeed!).lookFamily).toBe('bloom')
+    expect(deriveFromSeed(bloomSeed!)).toEqual(deriveFromSeed(bloomSeed!))
+    expect(createDocument(bloomSeed!).lookFamily).toBe('bloom')
   })
 })
 
@@ -119,18 +140,18 @@ describe('document commands', () => {
 
   it('setLookFamily changes lookFamily and keeps seed, params, and locks', () => {
     const base = setParamLock(
-      setParam(createDocument('family-switch-seed'), 'grain', 'amount', 0.37),
+      setParam(setLookFamily(createDocument('family-switch-seed'), 'blob'), 'grain', 'amount', 0.37),
       'softness',
       true,
     )
     expect(base.lookFamilyMode).toBe('random')
+    expect(base.lookFamily).toBe('blob')
     const next = setLookFamily(base, 'silk')
     expect(next.lookFamily).toBe('silk')
     expect(next.seed).toBe(base.seed)
     expect(next.params).toEqual(base.params)
     expect(next.lookFamilyMode).toBe('random')
     expect(next.paramLocks).toEqual({ palette: false, softness: true, grain: false })
-    expect(base.lookFamily).not.toBe('silk')
   })
 
   it('setLookFamily with random mode keeps mode random', () => {
@@ -196,7 +217,7 @@ describe('document commands', () => {
   it('randomize with fixed mode always yields that lookFamily and preserves mode', () => {
     const getRandomValues = stubCryptoBytes(0xcd)
 
-    for (const mode of ['blob', 'flow', 'silk'] as const) {
+    for (const mode of ['blob', 'flow', 'silk', 'bloom'] as const) {
       getRandomValues.mockClear()
       const base = setLookFamilyMode(createDocument('fixed-mode-base'), mode)
       const next = randomize(base)
@@ -206,6 +227,15 @@ describe('document commands', () => {
     }
 
     getRandomValues.mockRestore()
+  })
+
+  it('setLookFamily bloom keeps seed and params', () => {
+    const base = setParam(createDocument('bloom-switch-seed'), 'softness', 'amount', 0.41)
+    const next = setLookFamily(base, 'bloom')
+    expect(next.lookFamily).toBe('bloom')
+    expect(next.seed).toBe(base.seed)
+    expect(next.params).toEqual(base.params)
+    expect(next.lookFamilyMode).toBe('random')
   })
 
   it('fixed-mode randomize params still match createDocument for the new seed', () => {
@@ -272,7 +302,7 @@ describe('document commands', () => {
         return array
       })
 
-    for (const mode of ['blob', 'flow', 'silk'] as const) {
+    for (const mode of ['blob', 'flow', 'silk', 'bloom'] as const) {
       let doc = setLookFamilyMode(createDocument(`all-locked-${mode}`), mode)
       doc = setParam(doc, 'palette', 'energy', 0.15)
       doc = setParam(doc, 'softness', 'amount', 0.25)
@@ -349,7 +379,7 @@ describe('normalizeDocument', () => {
       },
     }
     const normalized = normalizeDocument(v1)
-    expect(normalized.schemaVersion).toBe(4)
+    expect(normalized.schemaVersion).toBe(SCHEMA_VERSION)
     expect(normalized.lookFamily).toBe('blob')
     expect(normalized.lookFamilyMode).toBe('random')
     expect(normalized.paramLocks).toEqual({
@@ -361,7 +391,7 @@ describe('normalizeDocument', () => {
     expect(normalized.seed).toBe(v1.seed)
   })
 
-  it('migrates v2 documents to schema 4 with mode random and unlocked locks', () => {
+  it('migrates v2 documents to schema 5 with mode random and unlocked locks', () => {
     const v2: GradientDocumentV2 = {
       schemaVersion: 2,
       seed: 'v2-seed',
@@ -373,7 +403,7 @@ describe('normalizeDocument', () => {
       },
     }
     const normalized = normalizeDocument(v2)
-    expect(normalized.schemaVersion).toBe(4)
+    expect(normalized.schemaVersion).toBe(SCHEMA_VERSION)
     expect(normalized.lookFamily).toBe('flow')
     expect(normalized.lookFamilyMode).toBe('random')
     expect(normalized.paramLocks).toEqual({
@@ -385,7 +415,7 @@ describe('normalizeDocument', () => {
     expect(normalized.seed).toBe(v2.seed)
   })
 
-  it('migrates v3 documents to schema 4 with unlocked locks', () => {
+  it('migrates v3 documents to schema 5 with unlocked locks', () => {
     const v3: GradientDocumentV3 = {
       schemaVersion: 3,
       seed: 'v3-seed',
@@ -398,7 +428,7 @@ describe('normalizeDocument', () => {
       },
     }
     const normalized = normalizeDocument(v3)
-    expect(normalized.schemaVersion).toBe(4)
+    expect(normalized.schemaVersion).toBe(SCHEMA_VERSION)
     expect(normalized.lookFamily).toBe('silk')
     expect(normalized.lookFamilyMode).toBe('blob')
     expect(normalized.paramLocks).toEqual({
@@ -410,8 +440,35 @@ describe('normalizeDocument', () => {
     expect(normalized.seed).toBe(v3.seed)
   })
 
+  it('migrates v4 documents to schema 5 without re-deriving lookFamily', () => {
+    const v4: GradientDocumentV4 = {
+      schemaVersion: 4,
+      seed: 'v4-seed',
+      lookFamily: 'silk',
+      lookFamilyMode: 'random',
+      paramLocks: { palette: true, softness: false, grain: false },
+      params: {
+        palette: { energy: 0.21 },
+        softness: { amount: 0.32 },
+        grain: { amount: 0.43 },
+      },
+    }
+    const normalized = normalizeDocument(v4)
+    expect(normalized.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(normalized.lookFamily).toBe('silk')
+    expect(normalized.lookFamilyMode).toBe('random')
+    expect(normalized.paramLocks).toEqual(v4.paramLocks)
+    expect(normalized.params).toEqual(v4.params)
+    expect(normalized.seed).toBe(v4.seed)
+  })
+
+  it('normalizeDocument accepts bloom when present', () => {
+    const doc = setLookFamily(createDocument('normalize-bloom'), 'bloom')
+    expect(normalizeDocument(doc)).toEqual(doc)
+  })
+
   it('returns current-schema documents unchanged when fields are valid', () => {
-    const doc = setParamLock(setLookFamilyMode(createDocument('v4-seed'), 'blob'), 'softness', true)
+    const doc = setParamLock(setLookFamilyMode(createDocument('v5-seed'), 'blob'), 'softness', true)
     expect(normalizeDocument(doc)).toEqual(doc)
   })
 })
@@ -432,9 +489,11 @@ describe('generate-path Math.random ban', () => {
     doc = setParamLock(doc, 'grain', true)
     doc = setLookFamilyMode(doc, 'flow')
     doc = setLookFamily(doc, 'silk')
+    doc = setLookFamilyMode(doc, 'bloom')
+    doc = setLookFamily(doc, 'bloom')
     doc = randomize(doc)
 
-    expect(doc.schemaVersion).toBe(4)
+    expect(doc.schemaVersion).toBe(SCHEMA_VERSION)
     expect(spy).not.toHaveBeenCalled()
 
     spy.mockRestore()

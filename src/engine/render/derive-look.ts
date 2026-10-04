@@ -253,5 +253,8 @@ export function deriveLookFromDocument(doc: GradientDocument): DerivedLook {
     case 'silk':
       // Silk paint uses deriveSilkLook.
       return deriveBlobLook(doc)
+    case 'bloom':
+      // Temporary: blob look data for fallback paint.
+      return deriveBlobLook(doc)
   }
 }

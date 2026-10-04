@@ -528,6 +528,10 @@ export function paintDocument(
     case 'silk':
       paintSilkDocument(state, doc, width, height)
       return
+    case 'bloom':
+      // Temporary until bloom GLSL: blob paint so discovery never blanks.
+      paintBlobDocument(state, doc, width, height)
+      return
   }
 }
 

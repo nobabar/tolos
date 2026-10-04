@@ -10,14 +10,15 @@ export type DerivedDocumentFields = {
  * Fixed PRNG draw order for seed -> document fields.
  *
  * Order:
- *   1. lookFamily (index into LOOK_FAMILIES)
+ *   1. lookFamily (index into LOOK_FAMILIES; equal weight, domain = length)
  *   2. palette.energy
  *   3. softness.amount
  *   4. grain.amount
  */
 export function deriveFromSeed(seed: string): DerivedDocumentFields {
   const prng = createPrng(seed)
-  const familyIndex = Math.min(2, Math.floor(prng.nextFloat01() * 3))
+  const familyCount = LOOK_FAMILIES.length
+  const familyIndex = Math.min(familyCount - 1, Math.floor(prng.nextFloat01() * familyCount))
   const lookFamily = LOOK_FAMILIES[familyIndex]!
   return {
     lookFamily,

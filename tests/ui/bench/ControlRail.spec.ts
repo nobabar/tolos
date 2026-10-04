@@ -232,7 +232,7 @@ describe('ControlRail actions', () => {
     expect(wrapper.get('.seed-field__copy').attributes('disabled')).toBeDefined()
   })
 
-  it('renders four look-family mode options with accessible names', () => {
+  it('renders five look-family mode options with accessible names including Bloom', () => {
     const wrapper = mount(ControlRail, {
       props: railProps(),
     })
@@ -243,7 +243,8 @@ describe('ControlRail actions', () => {
     expect(wrapper.text()).toContain('Blob')
     expect(wrapper.text()).toContain('Flow')
     expect(wrapper.text()).toContain('Silk')
-    expect(group.findAll('[role="radio"]')).toHaveLength(4)
+    expect(wrapper.text()).toContain('Bloom')
+    expect(group.findAll('[role="radio"]')).toHaveLength(5)
   })
 
   it('renders dial lock controls with accessible names', () => {

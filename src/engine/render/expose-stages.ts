@@ -108,7 +108,8 @@ export function paintExposeStage(
     return
   }
   const sketchMode = sketchModeForStage(stage)
-  if (doc.lookFamily === 'blob') {
+  if (doc.lookFamily === 'blob' || doc.lookFamily === 'bloom') {
+    // Bloom uses blob sketch until we land a dedicated path.
     paintBlobSketch(state, doc, width, height, sketchMode)
     return
   }

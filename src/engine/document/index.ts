@@ -3,6 +3,7 @@ export type {
   GradientDocumentV1,
   GradientDocumentV2,
   GradientDocumentV3,
+  GradientDocumentV4,
   GradientParams,
   GrainParams,
   LookFamily,
