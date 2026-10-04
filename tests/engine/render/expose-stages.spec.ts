@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createDocument, createOpaqueSeed, setLookFamily } from '@/engine/document'
-import { deriveLookFromDocument } from '@/engine/render/derive-look'
+import { deriveLookFromDocument, deriveSilkLook } from '@/engine/render/derive-look'
 import {
   EXPOSE_BEAT_COUNT,
   EXPOSE_TOTAL_MS,
@@ -9,6 +9,7 @@ import {
   isFinalExposeStage,
   paintExposeStage,
   planExpose,
+  silkSketchField,
 } from '@/engine/render/expose-stages'
 import * as GlPaint from '@/engine/render/gl-paint'
 import type { GlState } from '@/engine/render/gl-paint'
@@ -17,8 +18,12 @@ function blobDoc(seed: string) {
   return setLookFamily(createDocument(seed), 'blob')
 }
 
-function familyDoc(seed: string, family: 'flow' | 'silk') {
-  return setLookFamily(createDocument(seed), family)
+function silkDoc(seed: string) {
+  return setLookFamily(createDocument(seed), 'silk')
+}
+
+function flowDoc(seed: string) {
+  return setLookFamily(createDocument(seed), 'flow')
 }
 
 describe('expose stages', () => {
@@ -106,15 +111,66 @@ describe('expose stages', () => {
     expect(sketchSpy).not.toHaveBeenCalled()
   })
 
-  it('flow and silk non-final stages keep placeholder paintDocument path', () => {
+  it('flow non-final stages keep placeholder paintDocument path', () => {
     const state = { gl: {} } as GlState
-    const sketchSpy = vi.spyOn(GlPaint, 'paintBlobSketch').mockImplementation(() => undefined)
+    const blobSpy = vi.spyOn(GlPaint, 'paintBlobSketch').mockImplementation(() => undefined)
+    const silkSpy = vi.spyOn(GlPaint, 'paintSilkSketch').mockImplementation(() => undefined)
     const paintSpy = vi.spyOn(GlPaint, 'paintDocument').mockImplementation(() => undefined)
 
-    paintExposeStage(state, familyDoc('flow-placeholder', 'flow'), 64, 36, 0)
-    paintExposeStage(state, familyDoc('silk-placeholder', 'silk'), 64, 36, 1)
+    paintExposeStage(state, flowDoc('flow-placeholder'), 64, 36, 0)
 
-    expect(paintSpy).toHaveBeenCalledTimes(2)
+    expect(paintSpy).toHaveBeenCalledTimes(1)
+    expect(blobSpy).not.toHaveBeenCalled()
+    expect(silkSpy).not.toHaveBeenCalled()
+  })
+
+  it('silk sketch field matches deriveSilkLook fold levers and stays seed-stable', () => {
+    const doc = silkDoc('silk-sketch-field')
+    const look = deriveSilkLook(doc)
+    const field = silkSketchField(doc)
+
+    expect(field).toEqual({
+      foldAngle: look.uniforms.foldAngle,
+      foldFreq: look.uniforms.foldFreq,
+      sheenStrength: look.uniforms.sheenStrength,
+      iterations: look.uniforms.iterations,
+    })
+    expect(silkSketchField(doc)).toEqual(field)
+    expect(silkSketchField(silkDoc('silk-sketch-other'))).not.toEqual(field)
+  })
+
+  it('silk non-final stages paint sketch modes, not paintDocument', () => {
+    const doc = silkDoc('silk-sketch-stages')
+    const state = { gl: {} } as GlState
+    const sketchSpy = vi.spyOn(GlPaint, 'paintSilkSketch').mockImplementation(() => undefined)
+    const paintSpy = vi.spyOn(GlPaint, 'paintDocument').mockImplementation(() => undefined)
+
+    paintExposeStage(state, doc, 64, 36, 0)
+    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 1)
+    expect(paintSpy).not.toHaveBeenCalled()
+
+    sketchSpy.mockClear()
+    paintExposeStage(state, doc, 64, 36, 1)
+    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 2)
+    expect(paintSpy).not.toHaveBeenCalled()
+
+    sketchSpy.mockClear()
+    paintExposeStage(state, doc, 64, 36, 2)
+    expect(sketchSpy).toHaveBeenCalledWith(state, doc, 64, 36, 3)
+    expect(paintSpy).not.toHaveBeenCalled()
+  })
+
+  it('silk final stage still dispatches paintDocument', () => {
+    const doc = silkDoc('silk-sketch-final')
+    const plan = planExpose(doc)
+    const state = { gl: {} } as GlState
+    const sketchSpy = vi.spyOn(GlPaint, 'paintSilkSketch').mockImplementation(() => undefined)
+    const paintSpy = vi.spyOn(GlPaint, 'paintDocument').mockImplementation(() => undefined)
+
+    paintExposeStage(state, doc, 64, 36, plan.beatCount - 1)
+
+    expect(paintSpy).toHaveBeenCalledTimes(1)
+    expect(paintSpy).toHaveBeenCalledWith(state, doc, 64, 36)
     expect(sketchSpy).not.toHaveBeenCalled()
   })
 })

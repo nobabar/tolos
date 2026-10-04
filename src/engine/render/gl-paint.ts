@@ -57,7 +57,11 @@ export type SilkProgramLocations = {
   uSheen: WebGLUniformLocation
   uIterations: WebGLUniformLocation
   uColors: WebGLUniformLocation
+  uSketchMode: WebGLUniformLocation
 }
+
+/** Preview-only silk construction modes (1 ridges, 2 deepen, 3 color). */
+export type SilkSketchMode = 1 | 2 | 3
 
 export type GlState = {
   gl: WebGL2RenderingContext
@@ -242,6 +246,7 @@ function buildSilkProgram(
     'u_sheen',
     'u_iterations',
     'u_colors',
+    'u_sketchMode',
   ])
   if (!uniforms) return null
   const [
@@ -255,6 +260,7 @@ function buildSilkProgram(
     uSheen,
     uIterations,
     uColors,
+    uSketchMode,
   ] = uniforms
 
   return {
@@ -270,6 +276,7 @@ function buildSilkProgram(
     uSheen: uSheen!,
     uIterations: uIterations!,
     uColors: uColors!,
+    uSketchMode: uSketchMode!,
   }
 }
 
@@ -414,12 +421,13 @@ function paintFlowDocument(
   gl.bindVertexArray(null)
 }
 
-/** Directional fold + sheen path (silk family). */
-function paintSilkDocument(
+/** Upload silk uniforms and draw. sketchMode 0 is the final still path. */
+function paintSilkWithMode(
   state: GlState,
   doc: GradientDocument,
   width: number,
   height: number,
+  sketchMode: number,
 ): void {
   const { gl, silk, vao } = state
   const look = deriveSilkLook(doc)
@@ -445,10 +453,32 @@ function paintSilkDocument(
   gl.uniform1f(silk.uSheen, uniforms.sheenStrength)
   gl.uniform1f(silk.uIterations, uniforms.iterations)
   gl.uniform3fv(silk.uColors, colorRgb)
+  gl.uniform1f(silk.uSketchMode, sketchMode)
 
   gl.bindVertexArray(vao)
   gl.drawArrays(gl.TRIANGLES, 0, 3)
   gl.bindVertexArray(null)
+}
+
+/** Directional fold + sheen path (silk family). */
+function paintSilkDocument(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+): void {
+  paintSilkWithMode(state, doc, width, height, 0)
+}
+
+/** Preview-only silk construction sketch. Same deriveSilkLook field as the final still. */
+export function paintSilkSketch(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+  sketchMode: SilkSketchMode,
+): void {
+  paintSilkWithMode(state, doc, width, height, sketchMode)
 }
 
 /** Paint a document at an explicit pixel size (shared by preview and export). */

@@ -1,6 +1,13 @@
 import type { GradientDocument } from '../document'
-import { deriveLookFromDocument } from './derive-look'
-import { paintBlobSketch, paintDocument, type BlobSketchMode, type GlState } from './gl-paint'
+import { deriveLookFromDocument, deriveSilkLook } from './derive-look'
+import {
+  paintBlobSketch,
+  paintDocument,
+  paintSilkSketch,
+  type BlobSketchMode,
+  type GlState,
+  type SilkSketchMode,
+} from './gl-paint'
 
 /** Progressive expose: 4 beats over 2400ms (~2-2.5s). */
 export const EXPOSE_BEAT_COUNT = 4
@@ -18,6 +25,13 @@ export type BlobSketchMark = {
   x: number
   y: number
   radius: number
+}
+
+export type SilkSketchField = {
+  foldAngle: number
+  foldFreq: number
+  sheenStrength: number
+  iterations: number
 }
 
 /** Fixed short stage plan for preview choreography. */
@@ -42,7 +56,24 @@ export function blobSketchMarks(doc: GradientDocument): BlobSketchMark[] {
   }))
 }
 
+/** Silk fold field levers for construction sketch (same derive path as final). */
+export function silkSketchField(doc: GradientDocument): SilkSketchField {
+  const { uniforms } = deriveSilkLook(doc)
+  return {
+    foldAngle: uniforms.foldAngle,
+    foldFreq: uniforms.foldFreq,
+    sheenStrength: uniforms.sheenStrength,
+    iterations: uniforms.iterations,
+  }
+}
+
 function blobSketchModeForStage(stage: ExposeStageIndex): BlobSketchMode {
+  if (stage <= 0) return 1
+  if (stage === 1) return 2
+  return 3
+}
+
+function silkSketchModeForStage(stage: ExposeStageIndex): SilkSketchMode {
   if (stage <= 0) return 1
   if (stage === 1) return 2
   return 3
@@ -67,6 +98,10 @@ export function paintExposeStage(
     paintBlobSketch(state, doc, width, height, blobSketchModeForStage(stage))
     return
   }
-  // Flow/silk placeholders until their construction land.
+  if (doc.lookFamily === 'silk') {
+    paintSilkSketch(state, doc, width, height, silkSketchModeForStage(stage))
+    return
+  }
+  // Flow placeholder until its construction lands.
   paintDocument(state, doc, width, height)
 }
