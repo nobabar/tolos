@@ -5,6 +5,7 @@ import { mount } from '@vue/test-utils'
 import { createDocument } from '@/engine/document'
 import type { ExportPngResult } from '@/engine/export'
 import type { CreateRendererResult, Renderer } from '@/engine/render'
+import { EXPOSE_BEAT_COUNT, EXPOSE_TOTAL_MS, planExpose } from '@/engine/render/expose-stages'
 import { useGradientDocument, type UseGradientDocument } from '@/ui/bench/use-gradient-document'
 
 const draw = vi.fn<Renderer['draw']>()
@@ -29,6 +30,22 @@ function flushFrame(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => resolve())
   })
+}
+
+function stubMotionPreference(reduce: boolean): void {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn<(query: string) => MediaQueryList>((query: string) => ({
+      matches: reduce && query.includes('prefers-reduced-motion: reduce'),
+      media: query,
+      onchange: null,
+      addListener: vi.fn<() => void>(),
+      removeListener: vi.fn<() => void>(),
+      addEventListener: vi.fn<() => void>(),
+      removeEventListener: vi.fn<() => void>(),
+      dispatchEvent: vi.fn<() => boolean>(() => false),
+    })),
+  )
 }
 
 function mountComposable(): {
@@ -63,9 +80,12 @@ describe('useGradientDocument', () => {
       revokeObjectURL: vi.fn<() => void>(),
     })
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    // Default: reduced-motion snap so existing one-frame idle waits stay valid.
+    stubMotionPreference(true)
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
@@ -535,5 +555,95 @@ describe('useGradientDocument', () => {
     await nextTick()
     expect(api.doc.value).toEqual(before)
     wrapper.unmount()
+  })
+
+  describe('progressive expose', () => {
+    beforeEach(() => {
+      stubMotionPreference(false)
+      vi.useFakeTimers()
+    })
+
+    it('stays exposing across beats then returns to idle', () => {
+      const { api, wrapper } = mountComposable()
+      const host = document.createElement('div')
+      api.mountHost(host)
+      draw.mockClear()
+
+      const plan = planExpose(api.doc.value)
+      expect(plan.beatCount).toBe(EXPOSE_BEAT_COUNT)
+      expect(plan.totalMs).toBe(EXPOSE_TOTAL_MS)
+
+      api.applyParam('grain', 'amount', 0.55)
+      expect(api.jobState.value).toBe('exposing')
+      expect(draw).toHaveBeenCalledWith(api.doc.value, 0)
+
+      for (let stage = 1; stage < plan.beatCount; stage += 1) {
+        vi.advanceTimersByTime(plan.beatMs)
+        expect(api.jobState.value).toBe('exposing')
+        expect(draw).toHaveBeenCalledWith(api.doc.value, stage)
+      }
+
+      expect(draw).toHaveBeenCalledTimes(plan.beatCount)
+      vi.advanceTimersByTime(plan.beatMs)
+      expect(api.jobState.value).toBe('idle')
+      wrapper.unmount()
+    })
+
+    it('ignores racing commands mid-sequence', () => {
+      const { api, wrapper } = mountComposable()
+      const host = document.createElement('div')
+      api.mountHost(host)
+
+      api.applyParam('softness', 'amount', 0.2)
+      const seedBefore = api.doc.value.seed
+      const softnessBefore = api.doc.value.params.softness.amount
+
+      api.applyParam('softness', 'amount', 0.9)
+      api.applyRandomize()
+      api.applySeed('race-seed')
+
+      expect(api.doc.value.seed).toBe(seedBefore)
+      expect(api.doc.value.params.softness.amount).toBe(softnessBefore)
+      expect(api.jobState.value).toBe('exposing')
+
+      vi.advanceTimersByTime(EXPOSE_TOTAL_MS)
+      expect(api.jobState.value).toBe('idle')
+      wrapper.unmount()
+    })
+
+    it('with reduced motion paints final once and skips staged advances', async () => {
+      vi.useRealTimers()
+      stubMotionPreference(true)
+
+      const { api, wrapper } = mountComposable()
+      const host = document.createElement('div')
+      api.mountHost(host)
+      draw.mockClear()
+
+      api.applyParam('grain', 'amount', 0.33)
+      expect(api.jobState.value).toBe('exposing')
+      expect(draw).toHaveBeenCalledTimes(1)
+      expect(draw).toHaveBeenCalledWith(api.doc.value)
+      expect(draw.mock.calls[0]?.length).toBe(1)
+
+      await flushFrame()
+      expect(api.jobState.value).toBe('idle')
+      wrapper.unmount()
+    })
+
+    it('cancels in-flight stage paints on unmount', () => {
+      const { api, wrapper } = mountComposable()
+      const host = document.createElement('div')
+      api.mountHost(host)
+      draw.mockClear()
+
+      api.applyParam('grain', 'amount', 0.4)
+      expect(draw).toHaveBeenCalledTimes(1)
+      wrapper.unmount()
+
+      draw.mockClear()
+      vi.advanceTimersByTime(EXPOSE_TOTAL_MS)
+      expect(draw).not.toHaveBeenCalled()
+    })
   })
 })

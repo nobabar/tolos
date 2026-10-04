@@ -1,8 +1,10 @@
 import type { GradientDocument } from '../document'
+import { paintExposeStage } from './expose-stages'
 import { buildGlState, disposeGlState, paintDocument, type GlState } from './gl-paint'
 
 export type Renderer = {
-  draw: (doc: GradientDocument) => void
+  /** Omit stage for final-only paint. Pass a stage index for preview expose choreography. */
+  draw: (doc: GradientDocument, stage?: number) => void
   resize: () => void
   dispose: () => void
 }
@@ -54,10 +56,14 @@ export function createRenderer(host: HTMLElement): CreateRendererResult {
     return { width: canvas.width, height: canvas.height }
   }
 
-  const paint = (doc: GradientDocument): void => {
+  const paint = (doc: GradientDocument, stage?: number): void => {
     if (disposed || contextLost || !state) return
     const { width, height } = syncSize()
-    paintDocument(state, doc, width, height)
+    if (stage === undefined) {
+      paintDocument(state, doc, width, height)
+      return
+    }
+    paintExposeStage(state, doc, width, height, stage)
   }
 
   const onLost = (event: Event): void => {
@@ -84,10 +90,10 @@ export function createRenderer(host: HTMLElement): CreateRendererResult {
   canvas.addEventListener('webglcontextrestored', onRestored)
 
   const renderer: Renderer = {
-    draw(doc: GradientDocument): void {
+    draw(doc: GradientDocument, stage?: number): void {
       if (disposed) return
       lastDoc = doc
-      paint(doc)
+      paint(doc, stage)
     },
     resize(): void {
       if (disposed || !lastDoc) {

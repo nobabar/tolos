@@ -20,6 +20,7 @@ import {
 } from '@/engine/document'
 import { exportPng } from '@/engine/export'
 import { createRenderer, type Renderer } from '@/engine/render'
+import { planExpose } from '@/engine/render/expose-stages'
 
 export type JobState = 'idle' | 'exposing' | 'exporting'
 
@@ -32,6 +33,7 @@ type FamilyKeyMap = {
 }
 
 const EXPORT_FILENAME = 'tolos.png'
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
 
 export type UseGradientDocument = {
   doc: ShallowRef<GradientDocument>
@@ -59,6 +61,11 @@ function triggerDownload(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url)
 }
 
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches
+}
+
 export function useGradientDocument(): UseGradientDocument {
   const doc = shallowRef<GradientDocument>(randomize(createDocument(createOpaqueSeed())))
   const jobState = shallowRef<JobState>('idle')
@@ -66,6 +73,19 @@ export function useGradientDocument(): UseGradientDocument {
 
   let renderer: Renderer | null = null
   let resizeObserver: ResizeObserver | null = null
+  let exposeGeneration = 0
+  let exposeTimerIds: number[] = []
+  let exposeRafId = 0
+
+  function clearExposeSchedule(): void {
+    exposeGeneration += 1
+    for (const id of exposeTimerIds) window.clearTimeout(id)
+    exposeTimerIds = []
+    if (exposeRafId !== 0) {
+      cancelAnimationFrame(exposeRafId)
+      exposeRafId = 0
+    }
+  }
 
   function drawCurrent(): void {
     if (!renderer) return
@@ -76,12 +96,40 @@ export function useGradientDocument(): UseGradientDocument {
   /** Shared expose path for dial commits, seed restore, and randomize redraw. */
   function runExposure(mutate: () => void): void {
     if (jobState.value !== 'idle') return
+    clearExposeSchedule()
+    const generation = exposeGeneration
     jobState.value = 'exposing'
     mutate()
-    drawCurrent()
-    requestAnimationFrame(() => {
+
+    if (prefersReducedMotion()) {
+      drawCurrent()
+      exposeRafId = requestAnimationFrame(() => {
+        if (generation !== exposeGeneration) return
+        exposeRafId = 0
+        jobState.value = 'idle'
+      })
+      return
+    }
+
+    const plan = planExpose(doc.value)
+    if (renderer) {
+      renderer.draw(doc.value, 0)
+    }
+    for (let stage = 1; stage < plan.beatCount; stage += 1) {
+      const delay = stage * plan.beatMs
+      const timerId = window.setTimeout(() => {
+        if (generation !== exposeGeneration) return
+        if (!renderer) return
+        renderer.draw(doc.value, stage)
+      }, delay)
+      exposeTimerIds.push(timerId)
+    }
+
+    const doneId = window.setTimeout(() => {
+      if (generation !== exposeGeneration) return
       jobState.value = 'idle'
-    })
+    }, plan.totalMs)
+    exposeTimerIds.push(doneId)
   }
 
   function mountHost(host: HTMLElement): void {
@@ -160,6 +208,7 @@ export function useGradientDocument(): UseGradientDocument {
   }
 
   onBeforeUnmount(() => {
+    clearExposeSchedule()
     resizeObserver?.disconnect()
     resizeObserver = null
     renderer?.dispose()
