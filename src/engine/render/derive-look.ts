@@ -210,7 +210,8 @@ export function deriveSilkLook(doc: GradientDocument): DerivedSilkLook {
   const sheenStrength = 0.48 + prng.nextFloat01() * 0.47
   const iterations = 4 + Math.floor(prng.nextFloat01() * (SILK_MAX_ITERATIONS - 3))
 
-  const hueSpans = [0, 0.18, 0.52]
+  // Wider hue span helps iridescent wrap without neon sat.
+  const hueSpans = [0, 0.22, 0.48]
   const colors: [[number, number, number], [number, number, number], [number, number, number]] = [
     [0, 0, 0],
     [0, 0, 0],
@@ -218,11 +219,11 @@ export function deriveSilkLook(doc: GradientDocument): DerivedSilkLook {
   ]
   for (let i = 0; i < SILK_COLOR_COUNT; i += 1) {
     const hueJitter = (prng.nextFloat01() - 0.5) * 0.07
-    // Slightly softer sat/lit so folds read plush rather than neon stripes.
-    const sat = 0.34 + energy * 0.36 + prng.nextFloat01() * 0.14
-    const lit = 0.34 + prng.nextFloat01() * 0.4 + energy * 0.08
+    // Pastel-leaning stops so color-wrap reads iridescent, not stripe neon.
+    const sat = 0.28 + energy * 0.32 + prng.nextFloat01() * 0.14
+    const lit = 0.4 + prng.nextFloat01() * 0.38 + energy * 0.06
     const hue = baseHue + (hueSpans[i] ?? 0) + hueJitter
-    colors[i] = hslToRgb(hue, Math.min(1, sat), Math.min(0.9, lit))
+    colors[i] = hslToRgb(hue, Math.min(1, sat), Math.min(0.92, lit))
   }
 
   return {

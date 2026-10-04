@@ -55,8 +55,8 @@ vec2 nestFoldDomain(vec2 q, vec2 foldAxis, vec2 crossAxis, float baseFreq, float
   return q;
 }
 
-/** Draped-surface height: broad folds + secondary ripple in warped domain. */
-float silkHeight(vec2 q, vec2 foldAxis, vec2 crossAxis, float baseFreq, float soft, float energy) {
+/** Primary fold lobe along the seeded fold axis. */
+float silkHeightPrimary(vec2 q, vec2 foldAxis, vec2 crossAxis, float baseFreq, float soft) {
   float along = dot(q, foldAxis);
   float across = dot(q, crossAxis);
   float nSlow = valueNoise(q * (baseFreq * 0.28) + u_seed * 2.3);
@@ -65,11 +65,38 @@ float silkHeight(vec2 q, vec2 foldAxis, vec2 crossAxis, float baseFreq, float so
   float wa = along + (nSlow - 0.5) * warpAmt;
   float wc = across + (nMid - 0.5) * warpAmt * 0.7;
 
-  float h = sin(wa * baseFreq + u_seed * 4.0) * 0.66;
-  h += sin(wa * baseFreq * 1.55 + wc * 0.32 + u_seed * 2.2) * 0.28;
-  h += sin(wc * baseFreq * 0.42 + wa * 0.18 + u_seed) * 0.16;
-  h += (valueNoise(vec2(wa, wc) * baseFreq * 0.4 + u_seed * 1.5) - 0.5) * 0.18;
-  return h * (0.92 + energy * 0.28);
+  float h = sin(wa * baseFreq + u_seed * 4.0) * 0.62;
+  h += sin(wa * baseFreq * 1.55 + wc * 0.32 + u_seed * 2.2) * 0.26;
+  h += sin(wc * baseFreq * 0.42 + wa * 0.18 + u_seed) * 0.14;
+  h += (valueNoise(vec2(wa, wc) * baseFreq * 0.4 + u_seed * 1.5) - 0.5) * 0.16;
+  return h;
+}
+
+/** Second large-scale lobe on a seed-tilted axis for denser multi-fold mesh. */
+float silkHeightSecondary(vec2 q, vec2 foldAxis, vec2 crossAxis, float baseFreq, float soft) {
+  float tilt = 0.55 + u_seed * 0.9;
+  vec2 axis2 = normalize(foldAxis * cos(tilt) + crossAxis * sin(tilt));
+  vec2 cross2 = vec2(-axis2.y, axis2.x);
+  float freq2 = baseFreq * 0.48;
+  float along = dot(q, axis2);
+  float across = dot(q, cross2);
+  float n = valueNoise(q * (freq2 * 0.32) + vec2(u_seed * 5.2, 3.4));
+  float warpAmt = mix(0.22, 0.5, soft);
+  float wa = along + (n - 0.5) * warpAmt;
+  float wc = across + (valueNoise(q * freq2 * 0.55 + u_seed) - 0.5) * warpAmt * 0.65;
+
+  float h = sin(wa * freq2 + u_seed * 3.1) * 0.55;
+  h += sin(wa * freq2 * 1.35 + wc * 0.4 + u_seed * 1.7) * 0.28;
+  h += sin(wc * freq2 * 0.55 + wa * 0.2) * 0.14;
+  return h;
+}
+
+float silkHeight(vec2 q, vec2 foldAxis, vec2 crossAxis, float baseFreq, float soft, float energy) {
+  float h1 = silkHeightPrimary(q, foldAxis, crossAxis, baseFreq, soft);
+  float h2 = silkHeightSecondary(q, foldAxis, crossAxis, baseFreq, soft);
+  // Secondary lobe near parity so drapes read as dense multi-fold mesh.
+  float h = h1 * 0.92 + h2 * mix(0.88, 1.05, soft);
+  return h * (0.9 + energy * 0.28);
 }
 
 void main() {
@@ -108,42 +135,48 @@ void main() {
   vec3 N = normalize(vec3(-(hFoldP - hFoldM) / (2.0 * e), -(hCrossP - hCrossM) / (2.0 * e), 1.15));
   vec3 L = normalize(vec3(0.32, 0.48, 0.9));
   float ndotl = clamp(dot(N, L), 0.0, 1.0);
+  float graze = 1.0 - ndotl;
 
-  float shade = mix(0.32, 1.12, ndotl);
-  shade *= mix(0.7, 1.18, smoothstep(-0.75, 0.8, h));
+  float shade = mix(0.38, 1.1, ndotl);
+  shade *= mix(0.74, 1.16, smoothstep(-0.75, 0.8, h));
   // Softness calms contrast so folds stay plush, not plastic.
-  shade = mix(shade, 0.7 + h * 0.2, soft * 0.4);
+  shade = mix(shade, 0.74 + h * 0.18, soft * 0.42);
 
   vec3 Hvec = normalize(L + vec3(0.0, 0.0, 1.0));
-  float spec = pow(max(dot(N, Hvec), 0.0), mix(64.0, 22.0, soft));
-  float crest = smoothstep(0.0, 0.65, h);
-  float sheenAmt = u_sheen * mix(1.05, 1.55, energy) * (spec * (0.9 + crest * 0.7));
-
-  // Color wraps the surface (height + slow lateral + facing), not flat fold stripes.
-  float tH = smoothstep(-0.8, 0.8, h);
-  float tSide = fract(dot(q, crossAxis) * 0.12 + u_seed * 0.7 + tH * 0.25);
-  float mixT = clamp(tH * 0.55 + tSide * 0.25 + ndotl * 0.2, 0.0, 1.0);
+  float spec = pow(max(dot(N, Hvec), 0.0), mix(58.0, 20.0, soft));
+  float crest = smoothstep(-0.05, 0.65, h);
+  float sheenAmt = u_sheen * mix(1.05, 1.5, energy) * (spec * (0.85 + crest * 0.75));
 
   vec3 c0 = u_colors[0];
   vec3 c1 = u_colors[1];
   vec3 c2 = u_colors[2];
-  vec3 color;
-  if (mixT < 0.5) {
-    color = mix(c0, c1, smoothstep(0.0, 1.0, mixT * 2.0));
-  } else {
-    color = mix(c1, c2, smoothstep(0.0, 1.0, (mixT - 0.5) * 2.0));
-  }
 
-  // Light iridescent rim on glancing folds.
-  float rim = pow(1.0 - ndotl, mix(2.6, 1.5, soft));
-  color = mix(color, mix(c2, c0, tH), rim * 0.2);
+  // Pastel iridescence: color wraps height, facing, and normal angle.
+  float tH = smoothstep(-0.85, 0.85, h);
+  float tSide = fract(dot(q, crossAxis) * 0.1 + u_seed * 0.7 + tH * 0.2);
+  float pearl = 0.5 + 0.5 * sin(dot(N.xy, vec2(3.2, 2.5)) * 2.2 + h * 2.4 + u_seed * 5.0);
+  float mixT = clamp(tH * 0.4 + tSide * 0.18 + ndotl * 0.22 + pearl * 0.2, 0.0, 1.0);
+
+  vec3 alongFold = mix(c0, c1, smoothstep(0.0, 1.0, mixT));
+  vec3 acrossFold = mix(c1, c2, smoothstep(0.0, 1.0, fract(mixT + 0.35)));
+  vec3 color = mix(alongFold, acrossFold, 0.45 + graze * 0.2);
+
+  // Stronger glancing wrap (pearlescent rim between distant stops).
+  float rim = pow(graze, mix(2.2, 1.35, soft));
+  vec3 rimColor = mix(c2, c0, clamp(tH * 0.55 + pearl * 0.45, 0.0, 1.0));
+  color = mix(color, rimColor, rim * 0.38);
+  color = mix(color, mix(c0, c2, pearl), 0.12 + graze * 0.12);
+
   color *= shade;
   // Pearlescent crest light (tinted, not pure white bloom).
-  color += mix(vec3(1.0), color, 0.28) * sheenAmt * 0.85;
+  color += mix(vec3(1.0), color, 0.4) * sheenAmt * 0.8;
 
-  float satBoost = 0.9 + energy * 0.32;
+  // Keep mid energy from going neon; InstantGradient silk stays plush.
+  float satBoost = 0.82 + energy * 0.28;
   float luma = dot(color, vec3(0.299, 0.587, 0.114));
   color = mix(vec3(luma), color, satBoost);
+  // Lift crushed valleys a touch so pastel mass remains.
+  color = mix(color, max(color, vec3(luma * 0.85 + 0.06)), 0.2);
 
   float gFine = hash21(gl_FragCoord.xy + u_seed * 1000.0);
   float gCoarse = valueNoise(gl_FragCoord.xy * 0.45 + u_seed * 40.0);
