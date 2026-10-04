@@ -61,17 +61,17 @@ describe('deriveLookFromDocument', () => {
     expect(a.anchors).not.toEqual(b.anchors)
   })
 
-  it('blob anchor count is always in [4, 6] and varies across seeds', () => {
+  it('blob anchor count is always in [3, 4] and varies across seeds', () => {
     const counts = new Set<number>()
     for (let i = 0; i < 60; i += 1) {
       const look = deriveLookFromDocument(blobDoc(`blob-count-${i}`))
-      expect(look.anchors.length).toBeGreaterThanOrEqual(4)
-      expect(look.anchors.length).toBeLessThanOrEqual(6)
+      expect(look.anchors.length).toBeGreaterThanOrEqual(3)
+      expect(look.anchors.length).toBeLessThanOrEqual(4)
       expect(look.anchors.length).toBeLessThanOrEqual(MAX_ANCHORS)
       counts.add(look.anchors.length)
     }
-    expect(counts.size).toBeGreaterThan(1)
-    expect(counts.has(4) || counts.has(6)).toBe(true)
+    expect(counts.has(3)).toBe(true)
+    expect(counts.has(4)).toBe(true)
   })
 
   it('returns anchors with positions in [0,1] and rgb in [0,1]', () => {

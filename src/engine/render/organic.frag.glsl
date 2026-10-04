@@ -54,8 +54,14 @@ void main() {
   );
   p += (warp - 0.5) * warpAmt;
 
-  // Softness widens blobs; keep peaks readable so hues don't mud
-  float falloff = mix(2.8, 1.05, clamp(u_softness, 0.0, 1.0));
+  // Softness widens blobs; competition keeps peaks readable so hues don't mud
+  float soft = clamp(u_softness, 0.0, 1.0);
+  // Softness gentles falloff but stays above the mud floor
+  float falloff = mix(3.15, 1.55, soft);
+  // Finite competition power: nearer lobes dominate without hard seams
+  float edgeK = mix(2.75, 1.9, soft);
+  // Long-tail fill grows with Softness so mid/high soft rarely leaves voids
+  float tailAmt = mix(0.035, 0.28, soft);
   vec3 color = vec3(0.0);
   float weightSum = 0.0;
 
@@ -64,10 +70,13 @@ void main() {
     // Inactive slots are uploaded with radius 0
     float slotLive = step(0.001, radius);
     vec2 ap = vec2(u_anchorPos[i].x * aspect, u_anchorPos[i].y);
-    float r = radius * mix(0.9, 1.7, u_softness);
+    // Low soft can leave dark pockets; mid/high soft should fill the frame
+    float r = radius * mix(1.25, 2.85, soft);
     float d = length(p - ap) / max(r, 0.001);
-    float w = pow(max(0.0, 1.0 - d), falloff * 1.4);
-    w = w * w * slotLive;
+    float core = pow(max(0.0, 1.0 - d), falloff * 1.4);
+    core = pow(max(core, 0.0), edgeK);
+    float tail = pow(1.0 / (1.0 + 2.2 * d * d), mix(2.6, 1.35, soft));
+    float w = (core + tailAmt * tail) * slotLive;
     color += u_anchorRgb[i] * w;
     weightSum += w;
   }

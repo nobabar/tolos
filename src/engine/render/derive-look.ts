@@ -89,7 +89,7 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
 /**
  * Blob composition from stream `look:${seed}`. Draw order:
  * 1. baseHue
- * 2. anchorCount -> integer in [4, 6]
+ * 2. anchorCount -> integer in [3, 4]
  * 3. biasAxis -> 0 = horizontal off-center, 1 = vertical third
  * 4. biasThird -> 0..2 (left/center/right or top/mid/bottom)
  * 5. biasStrength
@@ -101,10 +101,10 @@ function deriveBlobLook(doc: GradientDocument): DerivedLook {
   const energy = doc.params.palette.energy
 
   const baseHue = prng.nextFloat01()
-  const anchorCount = 4 + Math.floor(prng.nextFloat01() * 3)
+  const anchorCount = 3 + Math.floor(prng.nextFloat01() * 2)
   const biasAxis = prng.nextFloat01() < 0.5 ? 0 : 1
   const biasThird = Math.floor(prng.nextFloat01() * 3)
-  const biasStrength = 0.35 + prng.nextFloat01() * 0.4
+  const biasStrength = 0.18 + prng.nextFloat01() * 0.28
   const biasCenter = (biasThird + 0.5) / 3
 
   const hueOffsets = [0, 0.08, 0.42, 0.55, 0.78, 0.22]
@@ -120,7 +120,7 @@ function deriveBlobLook(doc: GradientDocument): DerivedLook {
       y = y + (biasCenter - y) * pull
     }
 
-    const radius = 0.38 + prng.nextFloat01() * 0.55
+    const radius = 0.58 + prng.nextFloat01() * 0.4
     const hueJitter = (prng.nextFloat01() - 0.5) * 0.06
     const hue = baseHue + (hueOffsets[i] ?? 0) + hueJitter
     const sat = 0.55 + energy * 0.4 + prng.nextFloat01() * 0.12
