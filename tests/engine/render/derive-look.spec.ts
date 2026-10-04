@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { createDocument, setLookFamily, setParam, type GradientDocument } from '@/engine/document'
 import {
   MAX_ANCHORS,
+  MAX_BLOOM_STOPS,
   MAX_FLOW_STOPS,
   SILK_COLOR_COUNT,
+  deriveBloomLook,
   deriveFlowLook,
   deriveLookFromDocument,
   deriveSilkLook,
@@ -20,6 +22,10 @@ function flowDoc(seed: string): GradientDocument {
 
 function silkDoc(seed: string): GradientDocument {
   return setLookFamily(createDocument(seed), 'silk')
+}
+
+function bloomDoc(seed: string): GradientDocument {
+  return setLookFamily(createDocument(seed), 'bloom')
 }
 
 describe('deriveLookFromDocument', () => {
@@ -247,5 +253,78 @@ describe('deriveSilkLook', () => {
       counts.add(look.uniforms.iterations)
     }
     expect(counts.size).toBeGreaterThan(1)
+  })
+})
+
+describe('deriveBloomLook', () => {
+  it('same seed and schema yield identical bloom uniforms and stops', () => {
+    const doc = bloomDoc('bloom-seed-a')
+    expect(deriveBloomLook(doc)).toEqual(deriveBloomLook(doc))
+  })
+
+  it('different seeds yield different bloom field params', () => {
+    const a = deriveBloomLook(bloomDoc('bloom-seed-a'))
+    const b = deriveBloomLook(bloomDoc('bloom-seed-b'))
+    expect(a).not.toEqual(b)
+  })
+
+  it('stop count is always in [4, 5] and packs rgb in [0, 1]', () => {
+    const counts = new Set<number>()
+    for (let i = 0; i < 40; i += 1) {
+      const look = deriveBloomLook(bloomDoc(`bloom-stops-${i}`))
+      expect(look.stops.length).toBeGreaterThanOrEqual(4)
+      expect(look.stops.length).toBeLessThanOrEqual(5)
+      expect(look.stops.length).toBeLessThanOrEqual(MAX_BLOOM_STOPS)
+      counts.add(look.stops.length)
+      for (const rgb of look.stops) {
+        for (const channel of rgb) {
+          expect(channel).toBeGreaterThanOrEqual(0)
+          expect(channel).toBeLessThanOrEqual(1)
+        }
+      }
+    }
+    expect(counts.size).toBeGreaterThan(1)
+  })
+
+  it('packs soft/grain/energy and seeded warp params without Math.random', () => {
+    const spy = vi.spyOn(Math, 'random')
+    const doc = setParam(
+      setParam(bloomDoc('bloom-uniforms'), 'softness', 'amount', 0.72),
+      'grain',
+      'amount',
+      0.38,
+    )
+    const look = deriveBloomLook(doc)
+
+    expect(look.uniforms.softness).toBe(0.72)
+    expect(look.uniforms.grain).toBe(0.38)
+    expect(look.uniforms.energy).toBe(doc.params.palette.energy)
+    expect(look.uniforms.warpScale).toBeGreaterThan(0)
+    expect(look.uniforms.warpAmp).toBeGreaterThan(0)
+    expect(look.uniforms.fieldScale).toBeGreaterThan(0)
+    expect(look.uniforms.seedHash).toBeTypeOf('number')
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('warp and field scales stay in tuned ranges across seeds', () => {
+    for (let i = 0; i < 50; i += 1) {
+      const look = deriveBloomLook(bloomDoc(`bloom-ranges-${i}`))
+      expect(look.uniforms.warpScale).toBeGreaterThanOrEqual(1.4)
+      expect(look.uniforms.warpScale).toBeLessThanOrEqual(2.9)
+      expect(look.uniforms.warpAmp).toBeGreaterThanOrEqual(0.35)
+      expect(look.uniforms.warpAmp).toBeLessThanOrEqual(1.05)
+      expect(look.uniforms.fieldScale).toBeGreaterThanOrEqual(1.0)
+      expect(look.uniforms.fieldScale).toBeLessThanOrEqual(1.9)
+    }
+  })
+
+  it('bloom look data differs from blob anchors for the same seed', () => {
+    const seed = 'bloom-vs-blob'
+    const bloom = deriveBloomLook(bloomDoc(seed))
+    const blob = deriveLookFromDocument(blobDoc(seed))
+    expect(bloom.stops).toBeDefined()
+    expect(blob.anchors).toBeDefined()
+    expect(bloom).not.toEqual(blob)
   })
 })

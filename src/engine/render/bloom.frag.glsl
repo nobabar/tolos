@@ -9,6 +9,11 @@ uniform float u_softness;
 uniform float u_grain;
 uniform float u_energy;
 uniform float u_seed;
+uniform float u_warpScale;
+uniform float u_warpAmp;
+uniform float u_fieldScale;
+uniform vec3 u_stops[5];
+uniform float u_stopCount;
 
 float hash21(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
@@ -27,7 +32,7 @@ float valueNoise(vec2 p) {
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
-// 5-octave value fBM standing in for Perlin fBM in this spike.
+// 5-octave value fBM (Perlin stand-in for main-thread paint).
 float fbm(vec2 p) {
   float v = 0.0;
   float a = 0.5;
@@ -81,18 +86,15 @@ float perlinWorley(float perlin, float worley) {
   return mix(worley, 1.0, clamp(perlin, 0.0, 1.0));
 }
 
-vec3 samplePalette(float t) {
-  // Soft flower / cloud stops (not blob IDW anchors, not silk sheen).
-  const vec3 c0 = vec3(0.12, 0.10, 0.16);
-  const vec3 c1 = vec3(0.55, 0.22, 0.34);
-  const vec3 c2 = vec3(0.92, 0.55, 0.48);
-  const vec3 c3 = vec3(0.96, 0.88, 0.78);
-  const vec3 c4 = vec3(0.62, 0.74, 0.86);
-  t = clamp(t, 0.0, 1.0);
-  if (t < 0.25) return mix(c0, c1, t / 0.25);
-  if (t < 0.5) return mix(c1, c2, (t - 0.25) / 0.25);
-  if (t < 0.75) return mix(c2, c3, (t - 0.5) / 0.25);
-  return mix(c3, c4, (t - 0.75) / 0.25);
+vec3 sampleStops(float t) {
+  float n = max(u_stopCount - 1.0, 1.0);
+  float x = clamp(t, 0.0, 1.0) * n;
+  float i0 = floor(x);
+  float f = fract(x);
+  if (i0 < 0.5) return mix(u_stops[0], u_stops[1], f);
+  if (i0 < 1.5) return mix(u_stops[1], u_stops[2], f);
+  if (i0 < 2.5) return mix(u_stops[2], u_stops[3], f);
+  return mix(u_stops[3], u_stops[4], f);
 }
 
 void main() {
@@ -104,8 +106,9 @@ void main() {
   float energy = clamp(u_energy, 0.0, 1.0);
 
   // Softness calms spatial scale; Energy raises warp amplitude / structure.
-  float fieldScale = mix(2.4, 1.15, soft);
-  float warpAmp = mix(0.35, 1.05, energy);
+  float fieldScale = u_warpScale * mix(1.2, 0.55, soft);
+  float warpAmp = u_warpAmp * mix(0.75, 1.35, energy);
+  float cellScale = u_fieldScale * mix(1.15, 0.7, soft);
 
   vec2 p = pBase * fieldScale + vec2(u_seed * 11.0, u_seed * 7.0);
 
@@ -123,11 +126,11 @@ void main() {
   vec2 warped = p + 4.0 * r * warpAmp * 0.35;
 
   float perlinField = fbm(warped * 1.1 + u_seed * 3.0);
-  float worleyField = worleyFbm(warped * 1.35 + vec2(2.1, 0.7));
+  float worleyField = worleyFbm(warped * cellScale * 1.15 + vec2(2.1, 0.7));
   float density = perlinWorley(perlinField, worleyField);
 
   // Optional F2-F1 as soft secondary structure (not hard Voronoi edges).
-  vec2 cell = worley(warped * mix(1.8, 1.1, soft) + u_seed);
+  vec2 cell = worley(warped * mix(1.8, 1.1, soft) * cellScale + u_seed);
   float ridges = clamp(cell.y - cell.x, 0.0, 1.0);
   density = mix(density, density * (0.75 + 0.45 * ridges), 0.28 + energy * 0.22);
 
@@ -135,7 +138,7 @@ void main() {
   density = mix(density, smoothstep(0.15, 0.85, density), 1.0 - soft * 0.55);
 
   float t = clamp(density * 0.72 + fWarp * 0.28, 0.0, 1.0);
-  vec3 finalColor = samplePalette(t);
+  vec3 finalColor = sampleStops(t);
 
   float satBoost = 0.88 + energy * 0.22;
   float luma = dot(finalColor, vec3(0.299, 0.587, 0.114));

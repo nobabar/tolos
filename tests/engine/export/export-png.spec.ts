@@ -168,7 +168,6 @@ describe('exportPng', () => {
     expect(gl.deleteProgram).toHaveBeenCalled()
   })
 
-  // Temporary until 9.3: bloom falls back to blob paint so discovery export does not blank.
   it('renders bloom documents through paintDocument without mock GL gaps', async () => {
     const gl = createMockGl()
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(gl)
@@ -184,6 +183,7 @@ describe('exportPng', () => {
     expect(result).toEqual({ ok: true, blob: pngBlob })
     expect(gl.viewport).toHaveBeenCalledWith(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT)
     expect(gl.uniform3fv).toHaveBeenCalled()
+    expect(gl.uniform1f).toHaveBeenCalled()
     expect(gl.drawArrays).toHaveBeenCalled()
     expect(gl.deleteProgram).toHaveBeenCalled()
   })

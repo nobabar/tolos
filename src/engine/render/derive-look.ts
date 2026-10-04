@@ -16,6 +16,9 @@ export const SILK_COLOR_COUNT = 3 as const
 /** Shader iteration cap (main-thread full-screen). Seeded count is 4-8. */
 export const SILK_MAX_ITERATIONS = 8 as const
 
+/** Bloom palette stops uploaded to the shader (active count is 4-5). */
+export const MAX_BLOOM_STOPS = 5 as const
+
 export type ColorAnchor = {
   x: number
   y: number
@@ -64,6 +67,21 @@ export type SilkUniforms = {
 export type DerivedSilkLook = {
   colors: [[number, number, number], [number, number, number], [number, number, number]]
   uniforms: SilkUniforms
+}
+
+export type BloomUniforms = {
+  softness: number
+  grain: number
+  energy: number
+  seedHash: number
+  warpScale: number
+  warpAmp: number
+  fieldScale: number
+}
+
+export type DerivedBloomLook = {
+  stops: [number, number, number][]
+  uniforms: BloomUniforms
 }
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
@@ -193,6 +211,51 @@ export function deriveFlowLook(doc: GradientDocument): DerivedFlowLook {
 }
 
 /**
+ * Bloom warp + palette from stream `look:bloom:${seed}`.
+ * Draw order:
+ * 1. baseHue
+ * 2. stopCount -> integer in [4, 5]
+ * 3. warpScale
+ * 4. warpAmp
+ * 5. fieldScale
+ * 6. per active stop: hueJitter, satNoise, litNoise
+ */
+export function deriveBloomLook(doc: GradientDocument): DerivedBloomLook {
+  const prng = createPrng(`look:bloom:${doc.seed}`)
+  const energy = doc.params.palette.energy
+
+  const baseHue = prng.nextFloat01()
+  const stopCount = 4 + Math.floor(prng.nextFloat01() * 2)
+  const warpScale = 1.4 + prng.nextFloat01() * 1.5
+  const warpAmp = 0.35 + prng.nextFloat01() * 0.7
+  const fieldScale = 1.0 + prng.nextFloat01() * 0.9
+
+  // Soft flower / cloud spans (wide lit, moderate sat).
+  const hueSpans = [0, 0.12, 0.28, 0.48, 0.72]
+  const stops: [number, number, number][] = []
+  for (let i = 0; i < stopCount; i += 1) {
+    const hueJitter = (prng.nextFloat01() - 0.5) * 0.07
+    const sat = 0.28 + energy * 0.3 + prng.nextFloat01() * 0.14
+    const lit = 0.34 + prng.nextFloat01() * 0.42 + energy * 0.08
+    const hue = baseHue + (hueSpans[i] ?? 0) + hueJitter
+    stops.push(hslToRgb(hue, Math.min(0.82, sat), Math.min(0.9, lit)))
+  }
+
+  return {
+    stops,
+    uniforms: {
+      softness: doc.params.softness.amount,
+      grain: doc.params.grain.amount,
+      energy,
+      seedHash: hashSeedToUint32(doc.seed) / 4294967296,
+      warpScale,
+      warpAmp,
+      fieldScale,
+    },
+  }
+}
+
+/**
  * Silk folds + tri-color from stream `look:${seed}`. Draw order:
  * 1. baseHue
  * 2. foldAngle
@@ -254,7 +317,7 @@ export function deriveLookFromDocument(doc: GradientDocument): DerivedLook {
       // Silk paint uses deriveSilkLook.
       return deriveBlobLook(doc)
     case 'bloom':
-      // Temporary: blob look data for fallback paint.
+      // Bloom paint uses deriveBloomLook.
       return deriveBlobLook(doc)
   }
 }

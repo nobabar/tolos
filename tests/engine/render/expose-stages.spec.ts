@@ -32,6 +32,10 @@ function flowDoc(seed: string) {
   return setLookFamily(createDocument(seed), 'flow')
 }
 
+function bloomDoc(seed: string) {
+  return setLookFamily(createDocument(seed), 'bloom')
+}
+
 describe('expose stages', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -228,5 +232,35 @@ describe('expose stages', () => {
     expect(paintSpy).toHaveBeenCalledTimes(1)
     expect(paintSpy).toHaveBeenCalledWith(state, doc, 64, 36)
     expect(sketchSpy).not.toHaveBeenCalled()
+  })
+
+  it('bloom non-final stages fall through to paintDocument', () => {
+    const doc = bloomDoc('bloom-expose-stages')
+    const state = { gl: {} } as GlState
+    const blobSpy = vi.spyOn(GlPaint, 'paintBlobSketch').mockImplementation(() => undefined)
+    const paintSpy = vi.spyOn(GlPaint, 'paintDocument').mockImplementation(() => undefined)
+
+    paintExposeStage(state, doc, 64, 36, 0)
+    expect(paintSpy).toHaveBeenCalledWith(state, doc, 64, 36)
+    expect(blobSpy).not.toHaveBeenCalled()
+
+    paintSpy.mockClear()
+    paintExposeStage(state, doc, 64, 36, 1.5)
+    expect(paintSpy).toHaveBeenCalledWith(state, doc, 64, 36)
+    expect(blobSpy).not.toHaveBeenCalled()
+  })
+
+  it('bloom final stage still dispatches paintDocument', () => {
+    const doc = bloomDoc('bloom-expose-final')
+    const plan = planExpose(doc)
+    const state = { gl: {} } as GlState
+    const blobSpy = vi.spyOn(GlPaint, 'paintBlobSketch').mockImplementation(() => undefined)
+    const paintSpy = vi.spyOn(GlPaint, 'paintDocument').mockImplementation(() => undefined)
+
+    paintExposeStage(state, doc, 64, 36, plan.beatCount - 1)
+
+    expect(paintSpy).toHaveBeenCalledTimes(1)
+    expect(paintSpy).toHaveBeenCalledWith(state, doc, 64, 36)
+    expect(blobSpy).not.toHaveBeenCalled()
   })
 })

@@ -108,8 +108,12 @@ export function paintExposeStage(
     return
   }
   const sketchMode = sketchModeForStage(stage)
-  if (doc.lookFamily === 'blob' || doc.lookFamily === 'bloom') {
-    // Bloom uses blob sketch until we land a dedicated path.
+  if (doc.lookFamily === 'bloom') {
+    // No bloom construction sketch yet; non-final stages still end on final paint.
+    paintDocument(state, doc, width, height)
+    return
+  }
+  if (doc.lookFamily === 'blob') {
     paintBlobSketch(state, doc, width, height, sketchMode)
     return
   }

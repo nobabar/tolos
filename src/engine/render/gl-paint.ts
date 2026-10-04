@@ -1,12 +1,15 @@
 import type { GradientDocument } from '../document'
 import {
   MAX_ANCHORS,
+  MAX_BLOOM_STOPS,
   MAX_FLOW_STOPS,
   SILK_COLOR_COUNT,
+  deriveBloomLook,
   deriveFlowLook,
   deriveLookFromDocument,
   deriveSilkLook,
 } from './derive-look'
+import bloomFragSource from './bloom.frag.glsl?raw'
 import flowFragSource from './flow.frag.glsl?raw'
 import organicFragSource from './organic.frag.glsl?raw'
 import silkFragSource from './silk.frag.glsl?raw'
@@ -67,11 +70,27 @@ export type SilkProgramLocations = {
 /** Preview sketch phase: 1 ridges, 2 deepen, 3 color; fractional values blend neighbors. */
 export type SilkSketchMode = number
 
+export type BloomProgramLocations = {
+  program: WebGLProgram
+  aPos: number
+  uResolution: WebGLUniformLocation
+  uSoftness: WebGLUniformLocation
+  uGrain: WebGLUniformLocation
+  uEnergy: WebGLUniformLocation
+  uSeed: WebGLUniformLocation
+  uWarpScale: WebGLUniformLocation
+  uWarpAmp: WebGLUniformLocation
+  uFieldScale: WebGLUniformLocation
+  uStops: WebGLUniformLocation
+  uStopCount: WebGLUniformLocation
+}
+
 export type GlState = {
   gl: WebGL2RenderingContext
   blob: BlobProgramLocations
   flow: FlowProgramLocations
   silk: SilkProgramLocations
+  bloom: BloomProgramLocations
   vao: WebGLVertexArrayObject
   buffer: WebGLBuffer
 }
@@ -287,7 +306,59 @@ function buildSilkProgram(
   }
 }
 
-/** Build blob, flow, and silk programs with a shared fullscreen triangle. */
+function buildBloomProgram(
+  gl: WebGL2RenderingContext,
+  vert: WebGLShader,
+): BloomProgramLocations | null {
+  const frag = compileShader(gl, gl.FRAGMENT_SHADER, bloomFragSource)
+  if (!frag) return null
+  const program = linkProgram(gl, vert, frag)
+  gl.deleteShader(frag)
+  if (!program) return null
+
+  const uniforms = requireUniforms(gl, program, [
+    'u_resolution',
+    'u_softness',
+    'u_grain',
+    'u_energy',
+    'u_seed',
+    'u_warpScale',
+    'u_warpAmp',
+    'u_fieldScale',
+    'u_stops',
+    'u_stopCount',
+  ])
+  if (!uniforms) return null
+  const [
+    uResolution,
+    uSoftness,
+    uGrain,
+    uEnergy,
+    uSeed,
+    uWarpScale,
+    uWarpAmp,
+    uFieldScale,
+    uStops,
+    uStopCount,
+  ] = uniforms
+
+  return {
+    program,
+    aPos: gl.getAttribLocation(program, 'a_pos'),
+    uResolution: uResolution!,
+    uSoftness: uSoftness!,
+    uGrain: uGrain!,
+    uEnergy: uEnergy!,
+    uSeed: uSeed!,
+    uWarpScale: uWarpScale!,
+    uWarpAmp: uWarpAmp!,
+    uFieldScale: uFieldScale!,
+    uStops: uStops!,
+    uStopCount: uStopCount!,
+  }
+}
+
+/** Build blob, flow, silk, and bloom programs with a shared fullscreen triangle. */
 export function buildGlState(gl: WebGL2RenderingContext): GlState | null {
   const vert = compileShader(gl, gl.VERTEX_SHADER, vertSource)
   if (!vert) return null
@@ -295,11 +366,13 @@ export function buildGlState(gl: WebGL2RenderingContext): GlState | null {
   const blob = buildBlobProgram(gl, vert)
   const flow = buildFlowProgram(gl, vert)
   const silk = buildSilkProgram(gl, vert)
+  const bloom = buildBloomProgram(gl, vert)
   gl.deleteShader(vert)
-  if (!blob || !flow || !silk) {
+  if (!blob || !flow || !silk || !bloom) {
     if (blob) gl.deleteProgram(blob.program)
     if (flow) gl.deleteProgram(flow.program)
     if (silk) gl.deleteProgram(silk.program)
+    if (bloom) gl.deleteProgram(bloom.program)
     return null
   }
 
@@ -309,6 +382,7 @@ export function buildGlState(gl: WebGL2RenderingContext): GlState | null {
     gl.deleteProgram(blob.program)
     gl.deleteProgram(flow.program)
     gl.deleteProgram(silk.program)
+    gl.deleteProgram(bloom.program)
     return null
   }
 
@@ -320,7 +394,7 @@ export function buildGlState(gl: WebGL2RenderingContext): GlState | null {
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
   gl.bindVertexArray(null)
 
-  return { gl, blob, flow, silk, vao, buffer }
+  return { gl, blob, flow, silk, bloom, vao, buffer }
 }
 
 /** Upload blob uniforms and draw. sketchMode 0 is the final still path. */
@@ -511,6 +585,44 @@ export function paintSilkSketch(
   paintSilkWithMode(state, doc, width, height, sketchMode)
 }
 
+/** Nested warp + Perlin-Worley path (bloom family). Unused stop slots repeat the last color. */
+function paintBloomDocument(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+): void {
+  const { gl, bloom, vao } = state
+  const look = deriveBloomLook(doc)
+  const { stops, uniforms } = look
+
+  const stopRgb = new Float32Array(MAX_BLOOM_STOPS * 3)
+  const last = stops[stops.length - 1] ?? [0, 0, 0]
+  for (let i = 0; i < MAX_BLOOM_STOPS; i += 1) {
+    const rgb = stops[i] ?? last
+    stopRgb[i * 3] = rgb[0]
+    stopRgb[i * 3 + 1] = rgb[1]
+    stopRgb[i * 3 + 2] = rgb[2]
+  }
+
+  gl.viewport(0, 0, width, height)
+  gl.useProgram(bloom.program)
+  gl.uniform2f(bloom.uResolution, width, height)
+  gl.uniform1f(bloom.uSoftness, uniforms.softness)
+  gl.uniform1f(bloom.uGrain, uniforms.grain)
+  gl.uniform1f(bloom.uEnergy, uniforms.energy)
+  gl.uniform1f(bloom.uSeed, uniforms.seedHash)
+  gl.uniform1f(bloom.uWarpScale, uniforms.warpScale)
+  gl.uniform1f(bloom.uWarpAmp, uniforms.warpAmp)
+  gl.uniform1f(bloom.uFieldScale, uniforms.fieldScale)
+  gl.uniform3fv(bloom.uStops, stopRgb)
+  gl.uniform1f(bloom.uStopCount, stops.length)
+
+  gl.bindVertexArray(vao)
+  gl.drawArrays(gl.TRIANGLES, 0, 3)
+  gl.bindVertexArray(null)
+}
+
 /** Paint a document at an explicit pixel size (shared by preview and export). */
 export function paintDocument(
   state: GlState,
@@ -529,8 +641,7 @@ export function paintDocument(
       paintSilkDocument(state, doc, width, height)
       return
     case 'bloom':
-      // Temporary until bloom GLSL: blob paint so discovery never blanks.
-      paintBlobDocument(state, doc, width, height)
+      paintBloomDocument(state, doc, width, height)
       return
   }
 }
@@ -542,4 +653,5 @@ export function disposeGlState(state: GlState): void {
   state.gl.deleteProgram(state.blob.program)
   state.gl.deleteProgram(state.flow.program)
   state.gl.deleteProgram(state.silk.program)
+  state.gl.deleteProgram(state.bloom.program)
 }
