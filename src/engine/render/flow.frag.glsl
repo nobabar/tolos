@@ -123,24 +123,26 @@ void main() {
   finalColor = clamp(finalColor, 0.0, 1.0);
 
   // Preview expose: blend adjacent construction layers (export / final use mode 0).
-  // Isolines of the curl potential are streamlines of the same field as the final still.
+  // Guides follow the same advected scalar that drives final palette seams (full nested warp),
+  // not the first-octave potential alone (that field does not land where color bands sit).
   if (u_sketchMode > 0.5) {
-    vec2 nested = nestPotential(q);
-    float pot = fbm(nested);
-    float aaPot = max(fwidth(pot), 1e-4);
+    // Pre-fract carrier of `along` / `t` so isolines coincide with final flow ribbons.
+    float guideField = adv.x * 0.55 + adv.y * 0.35 + structure * 0.42;
+    guideField += (structure - 0.5) * 0.14 + curlCarry * 0.05;
+    float aaGuide = max(fwidth(guideField), 1e-4);
 
     float isoFreq1 = mix(5.4, 3.6, soft);
-    float iso1 = pot * isoFreq1;
+    float iso1 = guideField * isoFreq1;
     float dist1 = abs(fract(iso1 + 0.5) - 0.5);
-    float halfW1 = mix(0.5, 1.05, soft) * aaPot * isoFreq1;
+    float halfW1 = mix(0.5, 1.05, soft) * aaGuide * isoFreq1;
     float isolines1 = 1.0 - smoothstep(0.0, halfW1, dist1);
     float swirlAccent1 = smoothstep(0.2, 0.9, curlCarry) * mix(0.12, 0.28, energy);
     vec3 layerGuides = vec3(clamp(max(isolines1, swirlAccent1 * structure), 0.0, 1.0));
 
     float isoFreq2 = mix(7.2, 4.8, soft);
-    float iso2 = pot * isoFreq2;
+    float iso2 = guideField * isoFreq2;
     float dist2 = abs(fract(iso2 + 0.5) - 0.5);
-    float halfW2 = mix(0.42, 0.95, soft) * aaPot * isoFreq2;
+    float halfW2 = mix(0.42, 0.95, soft) * aaGuide * isoFreq2;
     float isolines2 = 1.0 - smoothstep(0.0, halfW2, dist2);
     float fieldHint = mix(0.06, 0.22, smoothstep(0.15, 0.85, structure));
     float swirlAccent2 = smoothstep(0.15, 0.85, curlCarry) * mix(0.18, 0.4, energy);
