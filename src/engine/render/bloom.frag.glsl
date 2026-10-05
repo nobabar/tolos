@@ -105,10 +105,12 @@ void main() {
   float soft = clamp(u_softness, 0.0, 1.0);
   float energy = clamp(u_energy, 0.0, 1.0);
 
-  // Softness calms spatial scale; Energy raises warp amplitude / structure.
-  float fieldScale = u_warpScale * mix(1.2, 0.55, soft);
-  float warpAmp = u_warpAmp * mix(0.75, 1.35, energy);
-  float cellScale = u_fieldScale * mix(1.15, 0.7, soft);
+  // Dial curves live primarily in deriveBloomLook (warpScale/amp/fieldScale).
+  // Softness here softens density thresholds via Worley competition (anti-mud).
+  // Energy raises ridge structure / field contrast; sat lift stays mild (anti-neon).
+  float fieldScale = u_warpScale;
+  float warpAmp = u_warpAmp;
+  float cellScale = u_fieldScale;
 
   vec2 p = pBase * fieldScale + vec2(u_seed * 11.0, u_seed * 7.0);
 
@@ -129,21 +131,25 @@ void main() {
   float worleyField = worleyFbm(warped * cellScale * 1.15 + vec2(2.1, 0.7));
   float density = perlinWorley(perlinField, worleyField);
 
-  // Optional F2-F1 as soft secondary structure (not hard Voronoi edges).
-  vec2 cell = worley(warped * mix(1.8, 1.1, soft) * cellScale + u_seed);
+  // F2-F1 ridges keep petal edges readable when Softness widens calm regions.
+  vec2 cell = worley(warped * mix(1.75, 1.05, soft) * cellScale + u_seed);
   float ridges = clamp(cell.y - cell.x, 0.0, 1.0);
-  density = mix(density, density * (0.75 + 0.45 * ridges), 0.28 + energy * 0.22);
+  float ridgeMix = mix(0.2, 0.48, energy) * mix(1.0, 0.72, soft);
+  density = mix(density, density * (0.72 + 0.5 * ridges), ridgeMix);
 
-  // Softness pulls toward a calmer low-contrast field.
-  density = mix(density, smoothstep(0.15, 0.85, density), 1.0 - soft * 0.55);
+  // Softness widens density thresholds; keep Worley remap, not flat average.
+  float lo = mix(0.12, 0.24, soft);
+  float hi = mix(0.88, 0.76, soft);
+  density = mix(density, smoothstep(lo, hi, density), mix(0.62, 0.28, soft));
 
   float t = clamp(density * 0.72 + fWarp * 0.28, 0.0, 1.0);
   vec3 finalColor = sampleStops(t);
 
-  float satBoost = 0.88 + energy * 0.22;
+  // Prefer structure over hue screaming: satBoost stays near or below 1.0.
+  float satBoost = 0.86 + energy * 0.14;
   float luma = dot(finalColor, vec3(0.299, 0.587, 0.114));
   finalColor = mix(vec3(luma), finalColor, satBoost);
-  finalColor = mix(finalColor, smoothstep(0.0, 1.0, finalColor), energy * 0.1);
+  finalColor = mix(finalColor, smoothstep(0.0, 1.0, finalColor), energy * 0.08);
 
   float gFine = hash21(gl_FragCoord.xy + u_seed * 1000.0);
   float gCoarse = valueNoise(gl_FragCoord.xy * 0.45 + u_seed * 40.0);

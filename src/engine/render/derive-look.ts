@@ -219,33 +219,43 @@ export function deriveFlowLook(doc: GradientDocument): DerivedFlowLook {
  * 4. warpAmp
  * 5. fieldScale
  * 6. per active stop: hueJitter, satNoise, litNoise
+ *
+ * Softness calms warp scale/amp and cell frequency (wider calm regions).
+ * Energy raises warp amp and mild stop contrast (sat capped, prefer structure).
+ * Grain packs 1:1 for the shared post-grain contract in the fragment.
  */
 export function deriveBloomLook(doc: GradientDocument): DerivedBloomLook {
   const prng = createPrng(`look:bloom:${doc.seed}`)
+  const soft = doc.params.softness.amount
   const energy = doc.params.palette.energy
+  const grain = doc.params.grain.amount
 
   const baseHue = prng.nextFloat01()
   const stopCount = 4 + Math.floor(prng.nextFloat01() * 2)
-  const warpScale = 1.4 + prng.nextFloat01() * 1.5
-  const warpAmp = 0.35 + prng.nextFloat01() * 0.7
-  const fieldScale = 1.0 + prng.nextFloat01() * 0.9
+  const baseWarpScale = 1.4 + prng.nextFloat01() * 1.5
+  const baseWarpAmp = 0.35 + prng.nextFloat01() * 0.7
+  const baseFieldScale = 1.0 + prng.nextFloat01() * 0.9
 
-  // Soft flower / cloud spans (wide lit, moderate sat).
+  const warpScale = baseWarpScale * (1.12 - soft * 0.52)
+  const warpAmp = baseWarpAmp * (0.82 + energy * 0.38) * (1.0 - soft * 0.3)
+  const fieldScale = baseFieldScale * (1.1 - soft * 0.38)
+
+  // Soft flower / cloud spans. Energy lifts structure via sat/lit; sat hard-cap avoids neon.
   const hueSpans = [0, 0.12, 0.28, 0.48, 0.72]
   const stops: [number, number, number][] = []
   for (let i = 0; i < stopCount; i += 1) {
     const hueJitter = (prng.nextFloat01() - 0.5) * 0.07
-    const sat = 0.28 + energy * 0.3 + prng.nextFloat01() * 0.14
-    const lit = 0.34 + prng.nextFloat01() * 0.42 + energy * 0.08
+    const sat = 0.26 + energy * 0.24 + prng.nextFloat01() * 0.12
+    const lit = 0.36 + prng.nextFloat01() * 0.4 + energy * 0.06
     const hue = baseHue + (hueSpans[i] ?? 0) + hueJitter
-    stops.push(hslToRgb(hue, Math.min(0.82, sat), Math.min(0.9, lit)))
+    stops.push(hslToRgb(hue, Math.min(0.7, sat), Math.min(0.9, lit)))
   }
 
   return {
     stops,
     uniforms: {
-      softness: doc.params.softness.amount,
-      grain: doc.params.grain.amount,
+      softness: soft,
+      grain,
       energy,
       seedHash: hashSeedToUint32(doc.seed) / 4294967296,
       warpScale,

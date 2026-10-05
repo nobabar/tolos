@@ -504,6 +504,31 @@ describe('useGradientDocument', () => {
     wrapper.unmount()
   })
 
+  it('locked Softness holds across New exposure in bloom mode while unlocked dials re-roll', async () => {
+    const { api, wrapper } = mountComposable()
+    api.applyLookFamilyMode('bloom')
+    await flushFrame()
+    api.applyParam('softness', 'amount', 0.31)
+    await flushFrame()
+    api.applyParam('grain', 'amount', 0.44)
+    await flushFrame()
+    api.applyParamLock('softness', true)
+    await flushFrame()
+
+    const seedBefore = api.doc.value.seed
+    api.applyRandomize()
+    await nextTick()
+
+    expect(api.doc.value.lookFamily).toBe('bloom')
+    expect(api.doc.value.lookFamilyMode).toBe('bloom')
+    expect(api.doc.value.seed).not.toBe(seedBefore)
+    expect(api.doc.value.params.softness.amount).toBe(0.31)
+    expect(api.doc.value.paramLocks.softness).toBe(true)
+    expect(api.doc.value.params.grain.amount).not.toBe(0.44)
+    await flushFrame()
+    wrapper.unmount()
+  })
+
   it('idle applyLookFamily updates lookFamily with mode alignment', async () => {
     const { api, wrapper } = mountComposable()
     api.applyLookFamilyMode('blob')

@@ -289,16 +289,21 @@ describe('deriveBloomLook', () => {
   it('packs soft/grain/energy and seeded warp params without Math.random', () => {
     const spy = vi.spyOn(Math, 'random')
     const doc = setParam(
-      setParam(bloomDoc('bloom-uniforms'), 'softness', 'amount', 0.72),
-      'grain',
-      'amount',
-      0.38,
+      setParam(
+        setParam(bloomDoc('bloom-uniforms'), 'softness', 'amount', 0.72),
+        'grain',
+        'amount',
+        0.38,
+      ),
+      'palette',
+      'energy',
+      0.55,
     )
     const look = deriveBloomLook(doc)
 
     expect(look.uniforms.softness).toBe(0.72)
     expect(look.uniforms.grain).toBe(0.38)
-    expect(look.uniforms.energy).toBe(doc.params.palette.energy)
+    expect(look.uniforms.energy).toBe(0.55)
     expect(look.uniforms.warpScale).toBeGreaterThan(0)
     expect(look.uniforms.warpAmp).toBeGreaterThan(0)
     expect(look.uniforms.fieldScale).toBeGreaterThan(0)
@@ -307,15 +312,91 @@ describe('deriveBloomLook', () => {
     spy.mockRestore()
   })
 
-  it('warp and field scales stay in tuned ranges across seeds', () => {
+  it('higher softness lowers warp scale, amp, and field frequency for the same seed', () => {
+    const seed = 'bloom-soft-map'
+    const firm = deriveBloomLook(
+      setParam(
+        setParam(bloomDoc(seed), 'softness', 'amount', 0.05),
+        'palette',
+        'energy',
+        0.5,
+      ),
+    )
+    const soft = deriveBloomLook(
+      setParam(
+        setParam(bloomDoc(seed), 'softness', 'amount', 0.95),
+        'palette',
+        'energy',
+        0.5,
+      ),
+    )
+
+    expect(soft.uniforms.warpScale).toBeLessThan(firm.uniforms.warpScale)
+    expect(soft.uniforms.warpAmp).toBeLessThan(firm.uniforms.warpAmp)
+    expect(soft.uniforms.fieldScale).toBeLessThan(firm.uniforms.fieldScale)
+    expect(soft.stops).toEqual(firm.stops)
+  })
+
+  it('higher energy raises warp amp and keeps stop chroma capped', () => {
+    const seed = 'bloom-energy-map'
+    const calm = deriveBloomLook(
+      setParam(
+        setParam(bloomDoc(seed), 'softness', 'amount', 0.4),
+        'palette',
+        'energy',
+        0.05,
+      ),
+    )
+    const vivid = deriveBloomLook(
+      setParam(
+        setParam(bloomDoc(seed), 'softness', 'amount', 0.4),
+        'palette',
+        'energy',
+        0.95,
+      ),
+    )
+
+    expect(vivid.uniforms.warpAmp).toBeGreaterThan(calm.uniforms.warpAmp)
+    expect(vivid.uniforms.warpScale).toBe(calm.uniforms.warpScale)
+    expect(vivid.uniforms.fieldScale).toBe(calm.uniforms.fieldScale)
+
+    for (const rgb of vivid.stops) {
+      const chroma = Math.max(...rgb) - Math.min(...rgb)
+      expect(chroma).toBeLessThanOrEqual(0.72)
+    }
+  })
+
+  it('grain packs 1:1 while soft/energy leave grain untouched', () => {
+    const seed = 'bloom-grain-map'
+    const low = deriveBloomLook(setParam(bloomDoc(seed), 'grain', 'amount', 0.05))
+    const high = deriveBloomLook(setParam(bloomDoc(seed), 'grain', 'amount', 0.9))
+    expect(low.uniforms.grain).toBe(0.05)
+    expect(high.uniforms.grain).toBe(0.9)
+    expect(high.uniforms.warpScale).toBe(low.uniforms.warpScale)
+    expect(high.uniforms.warpAmp).toBe(low.uniforms.warpAmp)
+    expect(high.uniforms.fieldScale).toBe(low.uniforms.fieldScale)
+  })
+
+  it('warp and field scales stay in tuned ranges across seeds at mid dials', () => {
     for (let i = 0; i < 50; i += 1) {
-      const look = deriveBloomLook(bloomDoc(`bloom-ranges-${i}`))
-      expect(look.uniforms.warpScale).toBeGreaterThanOrEqual(1.4)
-      expect(look.uniforms.warpScale).toBeLessThanOrEqual(2.9)
-      expect(look.uniforms.warpAmp).toBeGreaterThanOrEqual(0.35)
-      expect(look.uniforms.warpAmp).toBeLessThanOrEqual(1.05)
-      expect(look.uniforms.fieldScale).toBeGreaterThanOrEqual(1.0)
-      expect(look.uniforms.fieldScale).toBeLessThanOrEqual(1.9)
+      const doc = setParam(
+        setParam(
+          setParam(bloomDoc(`bloom-ranges-${i}`), 'softness', 'amount', 0.5),
+          'palette',
+          'energy',
+          0.5,
+        ),
+        'grain',
+        'amount',
+        0.5,
+      )
+      const look = deriveBloomLook(doc)
+      expect(look.uniforms.warpScale).toBeGreaterThanOrEqual(0.8)
+      expect(look.uniforms.warpScale).toBeLessThanOrEqual(2.6)
+      expect(look.uniforms.warpAmp).toBeGreaterThanOrEqual(0.2)
+      expect(look.uniforms.warpAmp).toBeLessThanOrEqual(1.15)
+      expect(look.uniforms.fieldScale).toBeGreaterThanOrEqual(0.7)
+      expect(look.uniforms.fieldScale).toBeLessThanOrEqual(1.8)
     }
   })
 
