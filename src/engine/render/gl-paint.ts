@@ -83,7 +83,11 @@ export type BloomProgramLocations = {
   uFieldScale: WebGLUniformLocation
   uStops: WebGLUniformLocation
   uStopCount: WebGLUniformLocation
+  uSketchMode: WebGLUniformLocation
 }
+
+/** Preview sketch phase: 1 guides, 2 denser, 3 color; fractional values blend neighbors. */
+export type BloomSketchMode = number
 
 export type GlState = {
   gl: WebGL2RenderingContext
@@ -327,6 +331,7 @@ function buildBloomProgram(
     'u_fieldScale',
     'u_stops',
     'u_stopCount',
+    'u_sketchMode',
   ])
   if (!uniforms) return null
   const [
@@ -340,6 +345,7 @@ function buildBloomProgram(
     uFieldScale,
     uStops,
     uStopCount,
+    uSketchMode,
   ] = uniforms
 
   return {
@@ -355,6 +361,7 @@ function buildBloomProgram(
     uFieldScale: uFieldScale!,
     uStops: uStops!,
     uStopCount: uStopCount!,
+    uSketchMode: uSketchMode!,
   }
 }
 
@@ -585,12 +592,13 @@ export function paintSilkSketch(
   paintSilkWithMode(state, doc, width, height, sketchMode)
 }
 
-/** Nested warp + Perlin-Worley path (bloom family). Unused stop slots repeat the last color. */
-function paintBloomDocument(
+/** Upload bloom uniforms and draw. sketchMode 0 is the final still path. */
+function paintBloomWithMode(
   state: GlState,
   doc: GradientDocument,
   width: number,
   height: number,
+  sketchMode: number,
 ): void {
   const { gl, bloom, vao } = state
   const look = deriveBloomLook(doc)
@@ -617,10 +625,32 @@ function paintBloomDocument(
   gl.uniform1f(bloom.uFieldScale, uniforms.fieldScale)
   gl.uniform3fv(bloom.uStops, stopRgb)
   gl.uniform1f(bloom.uStopCount, stops.length)
+  gl.uniform1f(bloom.uSketchMode, sketchMode)
 
   gl.bindVertexArray(vao)
   gl.drawArrays(gl.TRIANGLES, 0, 3)
   gl.bindVertexArray(null)
+}
+
+/** Nested warp + Perlin-Worley path (bloom family). Unused stop slots repeat the last color. */
+function paintBloomDocument(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+): void {
+  paintBloomWithMode(state, doc, width, height, 0)
+}
+
+/** Preview-only bloom construction sketch. Same deriveBloomLook field as the final still. */
+export function paintBloomSketch(
+  state: GlState,
+  doc: GradientDocument,
+  width: number,
+  height: number,
+  sketchMode: BloomSketchMode,
+): void {
+  paintBloomWithMode(state, doc, width, height, sketchMode)
 }
 
 /** Paint a document at an explicit pixel size (shared by preview and export). */

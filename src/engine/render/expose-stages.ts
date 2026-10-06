@@ -1,7 +1,13 @@
 import type { GradientDocument } from '../document'
-import { deriveFlowLook, deriveLookFromDocument, deriveSilkLook } from './derive-look'
+import {
+  deriveBloomLook,
+  deriveFlowLook,
+  deriveLookFromDocument,
+  deriveSilkLook,
+} from './derive-look'
 import {
   paintBlobSketch,
+  paintBloomSketch,
   paintDocument,
   paintFlowSketch,
   paintSilkSketch,
@@ -38,6 +44,12 @@ export type FlowSketchField = {
   swirlStrength: number
   fieldScale: number
   phase: [number, number]
+}
+
+export type BloomSketchField = {
+  warpScale: number
+  warpAmp: number
+  fieldScale: number
 }
 
 /** Fixed short stage plan for preview choreography. */
@@ -91,6 +103,16 @@ export function flowSketchField(doc: GradientDocument): FlowSketchField {
   }
 }
 
+/** Bloom warp field levers for construction sketch (same derive path as final). */
+export function bloomSketchField(doc: GradientDocument): BloomSketchField {
+  const { uniforms } = deriveBloomLook(doc)
+  return {
+    warpScale: uniforms.warpScale,
+    warpAmp: uniforms.warpAmp,
+    fieldScale: uniforms.fieldScale,
+  }
+}
+
 /**
  * Preview stage paint. Final stage is bit-identical to direct paintDocument.
  * Fractional stages blend adjacent construction layers in the family shader.
@@ -109,8 +131,7 @@ export function paintExposeStage(
   }
   const sketchMode = sketchModeForStage(stage)
   if (doc.lookFamily === 'bloom') {
-    // No bloom construction sketch yet; non-final stages still end on final paint.
-    paintDocument(state, doc, width, height)
+    paintBloomSketch(state, doc, width, height, sketchMode)
     return
   }
   if (doc.lookFamily === 'blob') {

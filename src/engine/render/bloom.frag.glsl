@@ -14,6 +14,7 @@ uniform float u_warpAmp;
 uniform float u_fieldScale;
 uniform vec3 u_stops[5];
 uniform float u_stopCount;
+uniform float u_sketchMode;
 
 float hash21(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
@@ -156,6 +157,59 @@ void main() {
   float g = (gFine * 0.7 + gCoarse * 0.3 - 0.5) * u_grain * 0.38;
   finalColor += g;
   finalColor = clamp(finalColor, 0.0, 1.0);
+
+  // Preview expose: blend adjacent construction layers (export / final use mode 0).
+  // Bloom sketches like a print developing: soft density body of the same `t` field,
+  // then a slightly stronger body with sparse isolines, then color.
+  // Avoid dense contour / Worley mesh (reads as topo map or cracked earth).
+  if (u_sketchMode > 0.5) {
+    float guide = t;
+    float aaGuide = max(fwidth(guide), 1e-4);
+
+    float body1 = smoothstep(0.18, 0.88, guide);
+    body1 = pow(body1, mix(1.15, 0.9, soft)) * mix(0.22, 0.4, energy);
+    body1 = max(body1, smoothstep(0.22, 0.82, guide) * 0.18);
+
+    float isoFreq1 = mix(2.6, 1.8, soft);
+    float iso1 = guide * isoFreq1;
+    float dist1 = abs(fract(iso1 + 0.5) - 0.5);
+    float halfW1 = mix(0.7, 1.35, soft) * aaGuide * isoFreq1;
+    float isolines1 = (1.0 - smoothstep(0.0, halfW1, dist1)) * mix(0.28, 0.48, energy);
+    vec3 layerGuides = vec3(clamp(body1 + isolines1, 0.0, 1.0));
+
+    float body2 = smoothstep(0.14, 0.9, guide);
+    body2 = pow(body2, mix(1.05, 0.82, soft)) * mix(0.34, 0.55, energy);
+    body2 = max(body2, smoothstep(0.18, 0.85, guide) * 0.28);
+
+    float isoFreq2 = mix(3.4, 2.3, soft);
+    float iso2 = guide * isoFreq2;
+    float dist2 = abs(fract(iso2 + 0.5) - 0.5);
+    float halfW2 = mix(0.6, 1.2, soft) * aaGuide * isoFreq2;
+    float isolines2 = (1.0 - smoothstep(0.0, halfW2, dist2)) * mix(0.32, 0.55, energy);
+    vec3 layerDense = vec3(clamp(body2 + isolines2, 0.0, 1.0));
+
+    vec3 layerColor = finalColor - vec3(g);
+    layerColor = clamp(layerColor, 0.0, 1.0);
+
+    float m = u_sketchMode;
+    vec3 sketch;
+    if (m < 2.0) {
+      float bt = clamp(m - 1.0, 0.0, 1.0);
+      bt = bt * bt * (3.0 - 2.0 * bt);
+      sketch = mix(layerGuides, layerDense, bt);
+    } else if (m < 3.0) {
+      float bt = clamp(m - 2.0, 0.0, 1.0);
+      bt = bt * bt * (3.0 - 2.0 * bt);
+      sketch = mix(layerDense, layerColor, bt);
+    } else {
+      float bt = clamp(m - 3.0, 0.0, 1.0);
+      bt = bt * bt * (3.0 - 2.0 * bt);
+      sketch = mix(layerColor, finalColor, bt);
+    }
+
+    outColor = vec4(clamp(sketch, 0.0, 1.0), 1.0);
+    return;
+  }
 
   outColor = vec4(finalColor, 1.0);
 }
